@@ -148,7 +148,11 @@ class _AboutPageState extends State<AboutPage> {
           _InfoCard(
             icon: Icons.code,
             title: '开源许可证',
-            onTap: () => showLicensePage(context),
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: '社交塔子',
+              applicationVersion: 'v1.1.0',
+            ),
           ),
           const SizedBox(height: 40),
           

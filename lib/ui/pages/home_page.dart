@@ -414,7 +414,8 @@ void _showUpdateDialog(BuildContext context, AppProvider app) {
         ],
       ),
       content: Column(
-        mainAxisSize: MainAxisSize.min,\        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '版本: ${app.latestRelease!.version}',
