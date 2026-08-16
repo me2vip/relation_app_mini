@@ -160,9 +160,9 @@ jobs:
         run: |
           BT="${{ steps.meta.outputs.build_type }}"
           if [[ "$BT" == "release" ]]; then
-            flutter build apk --release --split-per-abi --android-skip-build-dependency-validation
+            flutter build apk --release --split-per-abi
           else
-            flutter build apk --debug --android-skip-build-dependency-validation
+            flutter build apk --debug
           fi
 
       - name: 确定 APK 输出路径与文件名
