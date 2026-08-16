@@ -24,7 +24,7 @@ class PdfExporter {
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
-        header: (context) => pw.Container(
+        header: (pageContext) => pw.Container(
           alignment: pw.Alignment.centerLeft,
           margin: const pw.EdgeInsets.only(bottom: 20),
           child: pw.Column(
@@ -57,18 +57,18 @@ class PdfExporter {
             ],
           ),
         ),
-        footer: (context) => pw.Container(
+        footer: (pageContext) => pw.Container(
           alignment: pw.Alignment.centerRight,
           margin: const pw.EdgeInsets.only(top: 20),
           child: pw.Text(
-            '第 ${context.pageNumber} 页 / 共 ${context.pagesCount} 页',
+            '第 ${pageContext.pageNumber 页 / 共 ${pageContext.pagesCount} 页',
             style: const pw.TextStyle(
               fontSize: 10,
               color: PdfColors.grey600,
             ),
           ),
         ),
-        build: (context) => [
+        build: (pageContext) => [
           // 使用说明
           _buildSection(
             '📋 使用说明',

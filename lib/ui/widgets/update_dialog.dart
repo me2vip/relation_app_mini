@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:open_filex/open_filex.dart';
 import '../../core/utils/app_update_service.dart';
 
 class UpdateDialog extends StatefulWidget {
@@ -110,7 +111,7 @@ class _UpdateDialogState extends State<UpdateDialog> {
       final result = await AppUpdateService.installApk(file);
 
       if (mounted) {
-        if (result.type == ResultType.done) {
+        if (result.type == OpenResultType.done) {
           // 安装成功，退出应用
           Navigator.pop(context);
         } else {

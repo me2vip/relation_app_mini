@@ -58,7 +58,7 @@ class AIProvider extends ChangeNotifier {
       AIModel(
         id: _uuid.v4(),
         name: 'gpt-4o-mini',
-        provider: AIProvider.openai,
+        provider: AIModelProvider.openai,
         apiUrl: 'https://api.openai.com/v1',
         maxTokens: 4096,
         temperature: 0.7,
@@ -69,7 +69,7 @@ class AIProvider extends ChangeNotifier {
       AIModel(
         id: _uuid.v4(),
         name: 'claude-3-haiku',
-        provider: AIProvider.claude,
+        provider: AIModelProvider.claude,
         apiUrl: 'https://api.anthropic.com/v1',
         maxTokens: 4096,
         temperature: 0.7,
@@ -79,7 +79,7 @@ class AIProvider extends ChangeNotifier {
       AIModel(
         id: _uuid.v4(),
         name: 'qwen-plus',
-        provider: AIProvider.dashscope,
+        provider: AIModelProvider.dashscope,
         apiUrl: 'https://dashscope.aliyuncs.com/api/v1',
         maxTokens: 8192,
         temperature: 0.7,
@@ -89,7 +89,7 @@ class AIProvider extends ChangeNotifier {
       AIModel(
         id: _uuid.v4(),
         name: 'external',
-        provider: AIProvider.external,
+        provider: AIModelProvider.external,
         apiUrl: '',
         isDefault: false,
       ),
@@ -230,7 +230,7 @@ class AIProvider extends ChangeNotifier {
     return AIModel(
       id: _uuid.v4(),
       name: '',
-      provider: AIProvider.openai,
+      provider: AIModelProvider.openai,
       apiUrl: 'https://api.openai.com/v1',
     );
   }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/ai_provider.dart';
-import '../../models/ai_config.dart';
+import '../../models/ai_config.dart' show AIModelProvider, AIModel, AIConversation, AIMessage, AIFile;
 
 class AIChatPage extends StatefulWidget {
   const AIChatPage({super.key});

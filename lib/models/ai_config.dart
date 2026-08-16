@@ -1,4 +1,4 @@
-enum AIProvider {
+enum AIModelProvider {
   /// 内部AI - OpenAI兼容
   openai,
   /// 内部AI - Claude兼容
@@ -76,7 +76,7 @@ class AIModel {
   factory AIModel.fromJson(Map<String, dynamic> json) => AIModel(
     id: json['id'] as String,
     name: json['name'] as String,
-    provider: AIProvider.values[json['provider'] as int],
+    provider: AIModelProvider.values[json['provider'] as int],
     apiUrl: json['apiUrl'] as String,
     apiKey: json['apiKey'] as String?,
     maxTokens: json['maxTokens'] as int?,
@@ -88,15 +88,15 @@ class AIModel {
 
   String get providerName {
     switch (provider) {
-      case AIProvider.openai: return 'OpenAI';
-      case AIProvider.claude: return 'Claude';
-      case AIProvider.dashscope: return '通义千问';
-      case AIProvider.local: return '本地LLM';
-      case AIProvider.external: return '外部AI';
+      case AIModelProvider.openai: return 'OpenAI';
+      case AIModelProvider.claude: return 'Claude';
+      case AIModelProvider.dashscope: return '通义千问';
+      case AIModelProvider.local: return '本地LLM';
+      case AIModelProvider.external: return '外部AI';
     }
   }
 
-  bool get isExternal => provider == AIProvider.external;
+  bool get isExternal => provider == AIModelProvider.external;
 }
 
 class AIConversation {

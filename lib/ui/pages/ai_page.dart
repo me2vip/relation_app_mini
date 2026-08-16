@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/ai_provider.dart';
-import '../../models/ai_config.dart';
+import '../../models/ai_config.dart' show AIModelProvider, AIModel, AIConversation, AIMessage, AIFile;
 
 class AIPage extends StatelessWidget {
   const AIPage({super.key});
@@ -64,7 +64,7 @@ class AIPage extends StatelessWidget {
     final nameController = TextEditingController();
     final urlController = TextEditingController();
     final keyController = TextEditingController();
-    var selectedProvider = AIProvider.openai;
+    var selectedProvider = AIModelProvider.openai;
 
     showDialog(
       context: context,
@@ -92,19 +92,19 @@ class AIPage extends StatelessWidget {
                       ),
                       items: [
                         DropdownMenuItem(
-                          value: AIProvider.openai,
+                          value: AIModelProvider.openai,
                           child: Text('OpenAI'),
                         ),
                         DropdownMenuItem(
-                          value: AIProvider.claude,
+                          value: AIModelProvider.claude,
                           child: Text('Claude'),
                         ),
                         DropdownMenuItem(
-                          value: AIProvider.dashscope,
+                          value: AIModelProvider.dashscope,
                           child: Text('通义千问'),
                         ),
                         DropdownMenuItem(
-                          value: AIProvider.local,
+                          value: AIModelProvider.local,
                           child: Text('本地LLM'),
                         ),
                       ],
@@ -321,30 +321,30 @@ class _ModelCard extends StatelessWidget {
 
   IconData _getProviderIcon(AIProvider provider) {
     switch (provider) {
-      case AIProvider.openai:
+      case AIModelProvider.openai:
         return Icons.psychology;
-      case AIProvider.claude:
+      case AIModelProvider.claude:
         return Icons.smart_toy;
-      case AIProvider.dashscope:
+      case AIModelProvider.dashscope:
         return Icons.auto_awesome;
-      case AIProvider.local:
+      case AIModelProvider.local:
         return Icons.computer;
-      case AIProvider.external:
+      case AIModelProvider.external:
         return Icons.public;
     }
   }
 
   Color _getProviderColor(AIProvider provider) {
     switch (provider) {
-      case AIProvider.openai:
+      case AIModelProvider.openai:
         return Colors.green;
-      case AIProvider.claude:
+      case AIModelProvider.claude:
         return Colors.orange;
-      case AIProvider.dashscope:
+      case AIModelProvider.dashscope:
         return Colors.blue;
-      case AIProvider.local:
+      case AIModelProvider.local:
         return Colors.purple;
-      case AIProvider.external:
+      case AIModelProvider.external:
         return Colors.grey;
     }
   }

@@ -53,7 +53,7 @@ class AIService {
       };
       
       if (model.apiKey != null && model.apiKey!.isNotEmpty) {
-        if (model.provider == AIProvider.openai) {
+        if (model.provider == AIModelProvider.openai) {
           headers['Authorization'] = 'Bearer ${model.apiKey}';
         }
       }
@@ -123,7 +123,7 @@ class AIService {
     };
     
     if (model.apiKey != null && model.apiKey!.isNotEmpty) {
-      if (model.provider == AIProvider.openai) {
+      if (model.provider == AIModelProvider.openai) {
         headers['Authorization'] = 'Bearer ${model.apiKey}';
       }
     }
@@ -190,7 +190,7 @@ class AIService {
       };
       
       if (model.apiKey != null && model.apiKey!.isNotEmpty) {
-        if (model.provider == AIProvider.openai) {
+        if (model.provider == AIModelProvider.openai) {
           headers['Authorization'] = 'Bearer ${model.apiKey}';
         }
       }

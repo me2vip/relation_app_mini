@@ -426,7 +426,7 @@ class DatabaseService {
     return maps.map((m) => AIModel(
       id: m['id'] as String,
       name: m['name'] as String,
-      provider: AIProvider.values[m['provider'] as int],
+      provider: AIModelProvider.values[m['provider'] as int],
       apiUrl: m['api_url'] as String,
       apiKey: m['api_key'] as String?,
       maxTokens: m['max_tokens'] as int?,
