@@ -168,4 +168,41 @@ class NotificationService {
       payload: 'daily_summary',
     );
   }
+
+  /// 检查通知权限
+  static Future<bool> hasPermission() async {
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android != null) {
+      return await android.areNotificationsEnabled() ?? false;
+    }
+    return true;
+  }
+
+  /// 安排每日汇总通知
+  static Future<void> scheduleDailySummary({
+    required int hour,
+    required int minute,
+  }) async {
+    final now = DateTime.now();
+    var scheduledTime = DateTime(now.year, now.month, now.day, hour, minute);
+    
+    // 如果时间已过，安排到明天
+    if (scheduledTime.isBefore(now)) {
+      scheduledTime = scheduledTime.add(const Duration(days: 1));
+    }
+    
+    await scheduleNotification(
+      id: 'daily_summary_schedule'.hashCode,
+      title: '🌟 今日社交任务',
+      body: '点击查看今日待办任务',
+      scheduledTime: scheduledTime,
+      payload: 'daily_summary',
+    );
+  }
+
+  /// 取消每日汇总通知
+  static Future<void> cancelDailySummary() async {
+    await cancelNotification('daily_summary_schedule'.hashCode);
+  }
 }

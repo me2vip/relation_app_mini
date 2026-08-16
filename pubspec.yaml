@@ -40,6 +40,10 @@ dependencies:
   
   # 通知提醒
   flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+
+  # 生物识别
+  local_auth: ^2.3.0
   
   # 图片选择
   image_picker: ^1.1.2

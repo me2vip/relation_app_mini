@@ -15,6 +15,10 @@ import 'ui/pages/settings_page.dart';
 import 'ui/pages/contact_detail_page.dart';
 import 'ui/pages/ai_chat_page.dart';
 import 'ui/pages/external_ai_page.dart';
+import 'ui/pages/about_page.dart';
+import 'ui/pages/atmosphere_config_page.dart';
+import 'ui/pages/privacy_settings_page.dart';
+import 'ui/pages/notification_settings_page.dart';
 import 'services/notification_service.dart';
 
 void main() async {
@@ -90,6 +94,10 @@ class MyApp extends StatelessWidget {
           '/contact': (context) => const ContactDetailPage(),
           '/ai-chat': (context) => const AIChatPage(),
           '/external-ai': (context) => const ExternalAIPage(),
+          '/about': (context) => const AboutPage(),
+          '/atmosphere-config': (context) => const AtmosphereConfigPage(),
+          '/privacy-settings': (context) => const PrivacySettingsPage(),
+          '/notification-settings': (context) => const NotificationSettingsPage(),
         },
       ),
     );

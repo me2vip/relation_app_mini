@@ -1,7 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../core/providers/app_provider.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  bool _darkMode = false;
+  bool _pushNotification = true;
+  bool _dailySummary = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+  
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _darkMode = prefs.getBool('dark_mode') ?? false;
+      _pushNotification = prefs.getBool('push_notification') ?? true;
+      _dailySummary = prefs.getBool('daily_summary') ?? true;
+    });
+  }
+  
+  Future<void> _saveSetting(String key, bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(key, value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,13 +51,13 @@ class SettingsPage extends StatelessWidget {
                 icon: Icons.smart_toy_outlined,
                 title: 'AI模型配置',
                 subtitle: '管理AI模型和API密钥',
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/ai'),
               ),
               _SettingsTile(
                 icon: Icons.auto_awesome,
                 title: '任务生成配置',
                 subtitle: '设置AI生成任务的规则',
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/ai'),
               ),
             ],
           ),
@@ -35,21 +67,9 @@ class SettingsPage extends StatelessWidget {
             children: [
               _SettingsTile(
                 icon: Icons.notifications_outlined,
-                title: '推送通知',
-                subtitle: '任务提醒和更新通知',
-                trailing: Switch(
-                  value: true,
-                  onChanged: (value) {},
-                ),
-              ),
-              _SettingsTile(
-                icon: Icons.schedule,
-                title: '每日汇总',
-                subtitle: '每天早上发送任务汇总',
-                trailing: Switch(
-                  value: true,
-                  onChanged: (value) {},
-                ),
+                title: '通知管理',
+                subtitle: '推送通知、任务提醒、每日汇总',
+                onTap: () => Navigator.pushNamed(context, '/notification-settings'),
               ),
             ],
           ),
@@ -59,21 +79,15 @@ class SettingsPage extends StatelessWidget {
             children: [
               _SettingsTile(
                 icon: Icons.security_outlined,
-                title: '数据安全',
-                subtitle: '加密和备份设置',
-                onTap: () {},
-              ),
-              _SettingsTile(
-                icon: Icons.lock_outline,
-                title: '应用锁',
-                subtitle: '设置应用密码',
-                onTap: () {},
+                title: '隐私管理',
+                subtitle: '数据安全、应用锁、数据备份',
+                onTap: () => Navigator.pushNamed(context, '/privacy-settings'),
               ),
               _SettingsTile(
                 icon: Icons.color_lens_outlined,
                 title: '氛围配置',
                 subtitle: '设置向不同人展示的信息',
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/atmosphere-config'),
               ),
             ],
           ),
@@ -86,8 +100,12 @@ class SettingsPage extends StatelessWidget {
                 title: '深色模式',
                 subtitle: '切换深色/浅色主题',
                 trailing: Switch(
-                  value: false,
-                  onChanged: (value) {},
+                  value: _darkMode,
+                  onChanged: (value) {
+                    setState(() => _darkMode = value);
+                    _saveSetting('dark_mode', value);
+                    // TODO: 实际切换主题
+                  },
                 ),
               ),
             ],
@@ -96,23 +114,128 @@ class SettingsPage extends StatelessWidget {
           _SettingsSection(
             title: '关于',
             children: [
-              _SettingsTile(
-                icon: Icons.info_outline,
-                title: '版本信息',
-                subtitle: 'v1.0.0',
-                onTap: () {},
+              Consumer<AppProvider>(
+                builder: (context, app, _) {
+                  return _SettingsTile(
+                    icon: Icons.info_outline,
+                    title: '关于应用',
+                    subtitle: 'v${app.currentVersion}',
+                    onTap: () => Navigator.pushNamed(context, '/about'),
+                  );
+                },
               ),
               _SettingsTile(
                 icon: Icons.description_outlined,
                 title: '使用条款',
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/about'),
               ),
               _SettingsTile(
                 icon: Icons.privacy_tip_outlined,
                 title: '隐私政策',
-                onTap: () {},
+                onTap: () => Navigator.pushNamed(context, '/about'),
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+          
+          // 升级提示（当有新版本时）
+          Consumer<AppProvider>(
+            builder: (context, app, _) {
+              if (app.hasUpdate && app.latestRelease != null) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 20),
+                  child: Card(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    child: ListTile(
+                      leading: const Icon(
+                        Icons.system_update,
+                        color: Color(0xFF6366F1),
+                      ),
+                      title: Text(
+                        '发现新版本 v${app.latestRelease!.version}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF6366F1),
+                        ),
+                      ),
+                      subtitle: Text(
+                        app.latestRelease!.releaseNotes.split('\n').first,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: const Icon(
+                        Icons.arrow_forward_ios,
+                        size: 16,
+                        color: Color(0xFF6366F1),
+                      ),
+                      onTap: () => _showUpdateDialog(context, app),
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showUpdateDialog(BuildContext context, AppProvider app) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.system_update, color: Color(0xFF6366F1)),
+            SizedBox(width: 10),
+            Text('发现新版本'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '版本: ${app.latestRelease!.version}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              '大小: ${app.latestRelease!.apkSizeMB} MB',
+              style: const TextStyle(color: Colors.grey),
+            ),
+            if (app.latestRelease!.releaseNotes.isNotEmpty) ...[
+              const SizedBox(height: 15),
+              const Text(
+                '更新内容:',
+                style: TextStyle(fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 5),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: SingleChildScrollView(
+                  child: Text(
+                    app.latestRelease!.releaseNotes,
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('稍后更新'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              // 跳转到 GitHub Release 页面
+              // 或启动下载流程
+            },
+            child: const Text('立即更新'),
           ),
         ],
       ),
