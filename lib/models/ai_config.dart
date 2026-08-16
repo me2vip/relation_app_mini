@@ -14,7 +14,7 @@ enum AIModelProvider {
 class AIModel {
   final String id;
   final String name;
-  final AIProvider provider;
+  final AIModelProvider provider;
   final String apiUrl;
   final String? apiKey;
   final int? maxTokens;
@@ -39,7 +39,7 @@ class AIModel {
   AIModel copyWith({
     String? id,
     String? name,
-    AIProvider? provider,
+    AIModelProvider? provider,
     String? apiUrl,
     String? apiKey,
     int? maxTokens,

@@ -61,7 +61,7 @@ class PdfExporter {
           alignment: pw.Alignment.centerRight,
           margin: const pw.EdgeInsets.only(top: 20),
           child: pw.Text(
-            '第 ${pageContext.pageNumber 页 / 共 ${pageContext.pagesCount} 页',
+            '第 ${pageContext.pageNumber} 页 / 共 ${pageContext.pagesCount} 页',
             style: const pw.TextStyle(
               fontSize: 10,
               color: PdfColors.grey600,

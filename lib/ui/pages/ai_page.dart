@@ -85,7 +85,7 @@ class AIPage extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 15),
-                    DropdownButtonFormField<AIProvider>(
+                    DropdownButtonFormField<AIModelProvider>(
                       value: selectedProvider,
                       decoration: const InputDecoration(
                         labelText: 'AI提供商',
@@ -319,7 +319,7 @@ class _ModelCard extends StatelessWidget {
     );
   }
 
-  IconData _getProviderIcon(AIProvider provider) {
+  IconData _getProviderIcon(AIModelProvider provider) {
     switch (provider) {
       case AIModelProvider.openai:
         return Icons.psychology;
@@ -334,7 +334,7 @@ class _ModelCard extends StatelessWidget {
     }
   }
 
-  Color _getProviderColor(AIProvider provider) {
+  Color _getProviderColor(AIModelProvider provider) {
     switch (provider) {
       case AIModelProvider.openai:
         return Colors.green;
@@ -359,8 +359,8 @@ class _ExternalAICard extends StatelessWidget {
           Navigator.pushNamed(context, '/external-ai');
         },
         borderRadius: BorderRadius.circular(16),
-        child: const Padding(
-          padding: EdgeInsets.all(15),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
           child: Row(
             children: [
               Container(

@@ -47,12 +47,12 @@ class _AIChatPageState extends State<AIChatPage> {
         actions: [
           Consumer<AIProvider>(
             builder: (context, provider, _) {
-              return PopupMenuButton<AIProvider>(
+              return PopupMenuButton<AIModel>(
                 icon: const Icon(Icons.smart_toy),
                 onSelected: (model) => provider.selectModel(model),
                 itemBuilder: (context) {
                   return provider.internalModels.map((model) {
-                    return PopupMenuItem<AIProvider>(
+                    return PopupMenuItem<AIModel>(
                       value: model,
                       child: Row(
                         children: [
