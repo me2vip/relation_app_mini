@@ -2,6 +2,7 @@ name: relation_app_mini
 description: "社交塔子 - 智能社交搭子助手"
 publish_to: 'none'
 version: 1.0.0+1
+version_code: 1
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
