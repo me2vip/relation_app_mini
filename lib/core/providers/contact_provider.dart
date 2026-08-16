@@ -67,6 +67,17 @@ class ContactProvider extends ChangeNotifier {
   Future<void> addContact(Contact contact) async {
     try {
       await DatabaseService.saveContact(contact);
+      // 记录初始关系层级（关系跟踪起点）
+      final initial = RelationshipChange(
+        id: _uuid.v4(),
+        contactId: contact.id,
+        fromLevel: contact.level,
+        toLevel: contact.level,
+        type: RelationshipChangeType.initial,
+        reason: '创建联系人',
+        changedAt: DateTime.now(),
+      );
+      await DatabaseService.saveRelationshipChange(initial);
       await loadContacts();
     } catch (e) {
       _errorMessage = e.toString();
@@ -119,10 +130,36 @@ class ContactProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateContactLevel(String contactId, ContactLevel newLevel) async {
+  /// 调整联系人层级并记录变化（跟踪关系升迁）
+  Future<void> changeContactLevel(String contactId, ContactLevel newLevel, String reason, {RelationshipChangeType type = RelationshipChangeType.manual}) async {
     final contact = _contacts.firstWhere((c) => c.id == contactId);
-    final updated = contact.copyWith(level: newLevel, updatedAt: DateTime.now());
-    await updateContact(updated);
+    if (contact.level == newLevel) return;
+    final change = RelationshipChange(
+      id: _uuid.v4(),
+      contactId: contactId,
+      fromLevel: contact.level,
+      toLevel: newLevel,
+      type: type,
+      reason: reason.isEmpty ? '调整关系层级' : reason,
+      changedAt: DateTime.now(),
+    );
+    await DatabaseService.saveRelationshipChange(change);
+    await updateContact(contact.copyWith(level: newLevel));
+  }
+
+  Future<void> updateContactLevel(String contactId, ContactLevel newLevel) async {
+    await changeContactLevel(contactId, newLevel, '', type: RelationshipChangeType.manual);
+  }
+
+  /// 获取联系人关系升迁时间线（按时间倒序）
+  Future<List<RelationshipChange>> getRelationshipTimeline(String contactId) async {
+    try {
+      return await DatabaseService.getRelationshipChanges(contactId);
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return [];
+    }
   }
 
   Future<void> updateContactTags(String contactId, List<String> tags) async {

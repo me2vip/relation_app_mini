@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/app_provider.dart';
 import '../../models/contact.dart';
 import '../../models/task.dart';
+import '../../services/storage_service.dart';
 import '../widgets/contact_card.dart';
 import '../widgets/task_card.dart';
 import '../widgets/update_dialog.dart';
@@ -162,6 +164,8 @@ class _DashboardView extends StatelessWidget {
                   ),
                   const SizedBox(height: 30),
                   _buildStatsCards(context),
+                  const SizedBox(height: 30),
+                  const _RelationshipFeedSection(),
                   const SizedBox(height: 30),
                   const Text(
                     '今日待办',
@@ -661,6 +665,135 @@ class _SettingsTile extends StatelessWidget {
         trailing: const Icon(Icons.arrow_forward_ios, size: 16),
         onTap: onTap,
       ),
+    );
+  }
+}
+
+/// 首页关系升迁动态（全局跟踪视图）
+class _RelationshipFeedSection extends StatelessWidget {
+  const _RelationshipFeedSection();
+
+  Color _levelColor(ContactLevel level) {
+    switch (level) {
+      case ContactLevel.unimportant: return Colors.grey;
+      case ContactLevel.normal: return Colors.blue;
+      case ContactLevel.important: return Colors.orange;
+      case ContactLevel.core: return Colors.red;
+    }
+  }
+
+  String _levelName(ContactLevel level) {
+    switch (level) {
+      case ContactLevel.unimportant: return '不重要';
+      case ContactLevel.normal: return '一般';
+      case ContactLevel.important: return '重要';
+      case ContactLevel.core: return '核心';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ContactProvider>(
+      builder: (context, contactProvider, _) {
+        return FutureBuilder<List<RelationshipChange>>(
+          future: DatabaseService.getAllRelationshipChanges(),
+          builder: (context, snapshot) {
+            final all = snapshot.data ?? [];
+            final changes = all
+                .where((c) => c.type != RelationshipChangeType.initial)
+                .take(4)
+                .toList();
+            final nameOf = (String id) =>
+                contactProvider.contacts
+                    .where((c) => c.id == id)
+                    .firstOrNull?.name ??
+                '联系人';
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      '关系升迁动态',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (changes.isNotEmpty)
+                      TextButton(
+                        onPressed: () {
+                          final contact = contactProvider.contacts
+                              .where((c) => c.id == changes.first.contactId)
+                              .firstOrNull;
+                          if (contact != null) {
+                            contactProvider.selectContact(contact);
+                            Navigator.pushNamed(context, '/contact-detail');
+                          }
+                        },
+                        child: const Text('查看详情'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 15),
+                if (changes.isEmpty)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      '暂无关系升迁记录，去联系人详情调整层级试试',
+                      style: TextStyle(color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                  )
+                else
+                  ...changes.map((c) {
+                    final color = c.isPromotion
+                        ? Colors.green
+                        : c.isDemotion
+                            ? Colors.orange
+                            : Colors.grey;
+                    final icon = c.isPromotion
+                        ? Icons.arrow_upward
+                        : c.isDemotion
+                            ? Icons.arrow_downward
+                            : Icons.remove;
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: color.withOpacity(0.15),
+                          child: Icon(icon, color: color),
+                        ),
+                        title: Text(
+                          '${nameOf(c.contactId)}: ${_levelName(c.fromLevel)} → ${_levelName(c.toLevel)}',
+                        ),
+                        subtitle: Text(
+                          '${c.reason} · ${DateFormat('MM-dd').format(c.changedAt)}',
+                        ),
+                        onTap: () {
+                          final contact = contactProvider.contacts
+                              .where((x) => x.id == c.contactId)
+                              .firstOrNull;
+                          if (contact != null) {
+                            contactProvider.selectContact(contact);
+                            Navigator.pushNamed(context, '/contact-detail');
+                          }
+                        },
+                      ),
+                    );
+                  }).toList(),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -20,7 +20,7 @@ class _ContactDetailPageState extends State<ContactDetailPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -73,6 +73,7 @@ class _ContactDetailPageState extends State<ContactDetailPage>
                   Tab(text: '信息'),
                   Tab(text: '互动'),
                   Tab(text: '任务'),
+                  Tab(text: '关系'),
                 ],
               ),
               Expanded(
@@ -82,6 +83,7 @@ class _ContactDetailPageState extends State<ContactDetailPage>
                     _InfoTab(contact: contact),
                     _InteractionTab(contact: contact),
                     _TaskTab(contact: contact),
+                    _RelationshipTab(contact: contact),
                   ],
                 ),
               ),
@@ -226,14 +228,23 @@ class _ContactDetailPageState extends State<ContactDetailPage>
                   child: const Text('取消'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final provider = context.read<ContactProvider>();
-                    provider.updateContact(contact.copyWith(
+                    final newLevel = selectedLevel;
+                    final newGoal = goalController.text.isEmpty
+                        ? null
+                        : goalController.text;
+                    if (newLevel != contact.level) {
+                      await provider.changeContactLevel(
+                        contact.id,
+                        newLevel,
+                        '编辑时调整层级',
+                        type: RelationshipChangeType.manual,
+                      );
+                    }
+                    await provider.updateContact(contact.copyWith(
                       name: nameController.text,
-                      level: selectedLevel,
-                      goalRelation: goalController.text.isEmpty
-                          ? null
-                          : goalController.text,
+                      goalRelation: newGoal,
                     ));
                     Navigator.pop(context);
                   },
@@ -542,5 +553,236 @@ class _TaskTab extends StatelessWidget {
       case TaskType.other:
         return Icons.task;
     }
+  }
+}
+
+class _RelationshipTab extends StatelessWidget {
+  final Contact contact;
+  const _RelationshipTab({required this.contact});
+
+  Color _levelColor(ContactLevel level) {
+    switch (level) {
+      case ContactLevel.unimportant: return Colors.grey;
+      case ContactLevel.normal: return Colors.blue;
+      case ContactLevel.important: return Colors.orange;
+      case ContactLevel.core: return Colors.red;
+    }
+  }
+
+  String _levelName(ContactLevel level) {
+    switch (level) {
+      case ContactLevel.unimportant: return '不重要';
+      case ContactLevel.normal: return '一般';
+      case ContactLevel.important: return '重要';
+      case ContactLevel.core: return '核心';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<ContactProvider>(
+      builder: (context, provider, _) {
+        return FutureBuilder<List<RelationshipChange>>(
+          future: provider.getRelationshipTimeline(contact.id),
+          builder: (context, snapshot) {
+            final changes = snapshot.data ?? [];
+            final progress = contact.level.index / ContactLevel.core.index;
+            return ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _levelColor(contact.level).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _levelName(contact.level),
+                                style: TextStyle(
+                                  color: _levelColor(contact.level),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            const Spacer(),
+                            if (contact.goalRelation != null)
+                              Expanded(
+                                child: Text(
+                                  '目标: ${contact.goalRelation}',
+                                  style: const TextStyle(color: Colors.grey),
+                                  textAlign: TextAlign.end,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 15),
+                        LinearProgressIndicator(
+                          value: progress,
+                          backgroundColor: Colors.grey.shade200,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            _levelColor(contact.level),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '关系进度: ${contact.level.index} / ${ContactLevel.core.index}（${_levelName(contact.level)} → 核心）',
+                          style: const TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showLevelChangeDialog(context, contact, provider),
+                    icon: const Icon(Icons.trending_up),
+                    label: const Text('调整关系层级'),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  '关系演进时间线',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                const SizedBox(height: 10),
+                if (changes.isEmpty)
+                  const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text(
+                        '暂无关系变更记录',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ),
+                  )
+                else
+                  ...changes.map((c) => _buildTimelineItem(c)).toList(),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildTimelineItem(RelationshipChange change) {
+    final color = change.isPromotion
+        ? Colors.green
+        : change.isDemotion
+            ? Colors.orange
+            : Colors.grey;
+    final icon = change.isPromotion
+        ? Icons.arrow_upward
+        : change.isDemotion
+            ? Icons.arrow_downward
+            : Icons.remove;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: color.withOpacity(0.15),
+          child: Icon(icon, color: color),
+        ),
+        title: Text(
+          '${_levelName(change.fromLevel)} → ${_levelName(change.toLevel)}',
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(change.reason),
+            const SizedBox(height: 4),
+            Text(
+              '${change.typeName} · ${DateFormat('yyyy-MM-dd HH:mm').format(change.changedAt)}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showLevelChangeDialog(
+    BuildContext context,
+    Contact contact,
+    ContactProvider provider,
+  ) {
+    ContactLevel selected = contact.level;
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          title: const Text('调整关系层级'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<ContactLevel>(
+                  value: selected,
+                  decoration: const InputDecoration(labelText: '新层级'),
+                  items: ContactLevel.values.map((l) {
+                    return DropdownMenuItem(
+                      value: l,
+                      child: Text(_levelName(l)),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setSt(() => selected = v!),
+                ),
+                const SizedBox(height: 15),
+                TextField(
+                  controller: reasonController,
+                  decoration: const InputDecoration(
+                    labelText: '变更原因',
+                    hintText: '如: 完成3次深度交流、共同完成项目',
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('取消'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final newLevel = selected;
+                RelationshipChangeType type;
+                if (newLevel.index > contact.level.index) {
+                  type = RelationshipChangeType.promote;
+                } else if (newLevel.index < contact.level.index) {
+                  type = RelationshipChangeType.demote;
+                } else {
+                  type = RelationshipChangeType.manual;
+                }
+                provider.changeContactLevel(
+                  contact.id,
+                  newLevel,
+                  reasonController.text,
+                  type: type,
+                );
+                Navigator.pop(ctx);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

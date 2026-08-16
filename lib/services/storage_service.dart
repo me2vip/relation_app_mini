@@ -10,7 +10,7 @@ import '../models/atmosphere.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'relation_app_mini.db';
-  static const int _dbVersion = 1;
+  static const int _dbVersion = 2;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -167,6 +167,20 @@ class DatabaseService {
       )
     ''');
 
+    // 关系变化（升迁）跟踪表
+    await db.execute('''
+      CREATE TABLE relationship_changes (
+        id TEXT PRIMARY KEY,
+        contact_id TEXT NOT NULL,
+        from_level INTEGER NOT NULL,
+        to_level INTEGER NOT NULL,
+        type INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        changed_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+      )
+    ''');
+
     // 创建索引
     await db.execute('CREATE INDEX idx_contact_methods_contact_id ON contact_methods(contact_id)');
     await db.execute('CREATE INDEX idx_interactions_contact_id ON interactions(contact_id)');
@@ -174,10 +188,25 @@ class DatabaseService {
     await db.execute('CREATE INDEX idx_tasks_status ON tasks(status)');
     await db.execute('CREATE INDEX idx_tasks_scheduled_at ON tasks(scheduled_at)');
     await db.execute('CREATE INDEX idx_ai_messages_conversation_id ON ai_messages(conversation_id)');
+    await db.execute('CREATE INDEX idx_relationship_changes_contact_id ON relationship_changes(contact_id)');
   }
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // 处理数据库升级
+    if (oldVersion < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS relationship_changes (
+          id TEXT PRIMARY KEY,
+          contact_id TEXT NOT NULL,
+          from_level INTEGER NOT NULL,
+          to_level INTEGER NOT NULL,
+          type INTEGER NOT NULL,
+          reason TEXT NOT NULL,
+          changed_at TEXT NOT NULL,
+          FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+        )
+      ''');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_relationship_changes_contact_id ON relationship_changes(contact_id)');
+    }
   }
 
   // ========== 联系人操作 ==========
@@ -330,6 +359,61 @@ class DatabaseService {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  // ========== 关系变化（升迁）跟踪操作 ==========
+
+  static Future<void> saveRelationshipChange(RelationshipChange change) async {
+    final db = await database;
+    await db.insert(
+      'relationship_changes',
+      {
+        'id': change.id,
+        'contact_id': change.contactId,
+        'from_level': change.fromLevel.index,
+        'to_level': change.toLevel.index,
+        'type': change.type.index,
+        'reason': change.reason,
+        'changed_at': change.changedAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<List<RelationshipChange>> getRelationshipChanges(String contactId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'relationship_changes',
+      where: 'contact_id = ?',
+      whereArgs: [contactId],
+      orderBy: 'changed_at DESC',
+    );
+    return maps.map((m) => RelationshipChange(
+      id: m['id'] as String,
+      contactId: m['contact_id'] as String,
+      fromLevel: ContactLevel.values[m['from_level'] as int],
+      toLevel: ContactLevel.values[m['to_level'] as int],
+      type: RelationshipChangeType.values[m['type'] as int],
+      reason: m['reason'] as String,
+      changedAt: DateTime.parse(m['changed_at'] as String),
+    )).toList();
+  }
+
+  static Future<List<RelationshipChange>> getAllRelationshipChanges() async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'relationship_changes',
+      orderBy: 'changed_at DESC',
+    );
+    return maps.map((m) => RelationshipChange(
+      id: m['id'] as String,
+      contactId: m['contact_id'] as String,
+      fromLevel: ContactLevel.values[m['from_level'] as int],
+      toLevel: ContactLevel.values[m['to_level'] as int],
+      type: RelationshipChangeType.values[m['type'] as int],
+      reason: m['reason'] as String,
+      changedAt: DateTime.parse(m['changed_at'] as String),
+    )).toList();
   }
 
   // ========== 任务操作 ==========

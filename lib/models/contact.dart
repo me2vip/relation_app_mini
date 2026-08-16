@@ -195,3 +195,79 @@ class Contact {
     }
   }
 }
+
+/// 关系变化类型（跟踪关系升迁）
+enum RelationshipChangeType {
+  /// 初始设定（创建联系人时）
+  initial,
+  /// 手动升迁
+  promote,
+  /// 手动降级
+  demote,
+  /// 自动调整（任务完成/互动达标触发）
+  auto,
+  /// 手动调整（无方向性）
+  manual,
+}
+
+/// 关系变化记录（单次层级变更，用于跟踪关系升迁时间线）
+class RelationshipChange {
+  final String id;
+  final String contactId;
+  final ContactLevel fromLevel;
+  final ContactLevel toLevel;
+  final RelationshipChangeType type;
+  final String reason;
+  final DateTime changedAt;
+
+  const RelationshipChange({
+    required this.id,
+    required this.contactId,
+    required this.fromLevel,
+    required this.toLevel,
+    required this.type,
+    required this.reason,
+    required this.changedAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'contactId': contactId,
+    'fromLevel': fromLevel.index,
+    'toLevel': toLevel.index,
+    'type': type.index,
+    'reason': reason,
+    'changedAt': changedAt.toIso8601String(),
+  };
+
+  factory RelationshipChange.fromJson(Map<String, dynamic> json) => RelationshipChange(
+    id: json['id'] as String,
+    contactId: json['contactId'] as String,
+    fromLevel: ContactLevel.values[json['fromLevel'] as int],
+    toLevel: ContactLevel.values[json['toLevel'] as int],
+    type: RelationshipChangeType.values[json['type'] as int],
+    reason: json['reason'] as String,
+    changedAt: DateTime.parse(json['changedAt'] as String),
+  );
+
+  String get typeName {
+    switch (type) {
+      case RelationshipChangeType.initial: return '初始设定';
+      case RelationshipChangeType.promote: return '关系升迁';
+      case RelationshipChangeType.demote: return '关系降级';
+      case RelationshipChangeType.auto: return '自动调整';
+      case RelationshipChangeType.manual: return '手动调整';
+    }
+  }
+
+  /// 是否升迁（层级数值变大）
+  bool get isPromotion => toLevel.index > fromLevel.index;
+  /// 是否降级（层级数值变小）
+  bool get isDemotion => toLevel.index < fromLevel.index;
+  /// 距目标层级的进度（0~1），fromLevel 视为起点、toLevel 视为当前
+  double get levelProgress {
+    const max = ContactLevel.core.index;
+    if (max == 0) return 1;
+    return toLevel.index / max;
+  }
+}
