@@ -266,7 +266,7 @@ class RelationshipChange {
   bool get isDemotion => toLevel.index < fromLevel.index;
   /// 距目标层级的进度（0~1），fromLevel 视为起点、toLevel 视为当前
   double get levelProgress {
-    const max = ContactLevel.core.index;
+    final max = ContactLevel.core.index;
     if (max == 0) return 1;
     return toLevel.index / max;
   }
