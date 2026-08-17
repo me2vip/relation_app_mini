@@ -23,19 +23,46 @@ android {
         applicationId = "com.mini.relation_app_mini"
         minSdk = 21
         targetSdk = flutter.targetSdkVersion
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     signingConfigs {
         getByName("debug") {}
         create("release") {
-            if (project.hasProperty("ANDROID_KEYSTORE_PATH") &&
-                project.property("ANDROID_KEYSTORE_PATH").toString().isNotEmpty()) {
-                keyAlias = project.property("ANDROID_KEY_ALIAS").toString()
-                keyPassword = project.property("ANDROID_KEY_PASSWORD").toString()
-                storeFile = file(project.property("ANDROID_KEYSTORE_PATH").toString())
-                storePassword = project.property("ANDROID_STORE_PASSWORD").toString()
+            // 签名参数来源优先级：
+            // 1. android/key.properties 文件（Flutter 官方推荐，CI 生成）
+            // 2. -P 命令行参数 / ORG_GRADLE_PROJECT_ 环境变量
+            val keystorePropertiesFile = rootProject.file("key.properties")
+            val keystoreProperties = java.util.Properties()
+            if (keystorePropertiesFile.exists()) {
+                keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+            }
+            fun prop(name: String): String {
+                val fromFile = keystoreProperties.getProperty(name)
+                if (!fromFile.isNullOrBlank()) return fromFile
+                if (project.hasProperty(name)) {
+                    return project.property(name).toString()
+                }
+                return ""
+            }
+            val storePath = prop("storeFile")
+            val keyAliasName = prop("keyAlias")
+            val storePass = prop("storePassword")
+            val keyPass = prop("keyPassword")
+            if (storePath.isNotBlank() && keyAliasName.isNotBlank() &&
+                storePass.isNotBlank() && keyPass.isNotBlank()) {
+                keyAlias = keyAliasName
+                keyPassword = keyPass
+                // storeFile 相对路径按 key.properties 所在目录（android/）解析；
+                // 绝对路径（如 CI 传入的 ANDROID_KEYSTORE_PATH）直接使用。
+                val storeFileObj = java.io.File(storePath)
+                storeFile = if (storeFileObj.isAbsolute) {
+                    storeFileObj
+                } else {
+                    java.io.File(keystorePropertiesFile.parentFile, storePath)
+                }
+                storePassword = storePass
             }
         }
     }
@@ -45,9 +72,9 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
         getByName("release") {
-            signingConfig = if (project.hasProperty("ANDROID_KEYSTORE_PATH") &&
-                project.property("ANDROID_KEYSTORE_PATH").toString().isNotEmpty()) {
-                signingConfigs.getByName("release")
+            val releaseSigning = signingConfigs.getByName("release")
+            signingConfig = if (releaseSigning.storeFile != null) {
+                releaseSigning
             } else {
                 signingConfigs.getByName("debug")
             }
