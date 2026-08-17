@@ -13,6 +13,7 @@ library update_dialog;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../utils/app_downloader.dart';
 import '../utils/app_update_service.dart';
@@ -163,6 +164,24 @@ class _UpdateContentDialogState extends State<_UpdateContentDialog> {
       // 调起系统安装器
       final result = await AppUpdateService.installApk(file);
       if (!mounted) return;
+      if (result.type == ResultType.permissionDenied) {
+        // 未授予“安装未知应用”权限：引导用户去系统设置页开启后重试
+        setState(() => _state = _UpdateState.done);
+        final granted = await _requestInstallPermission();
+        if (!mounted) return;
+        if (granted) {
+          // 用户已授权，再次调起安装器
+          final retry = await AppUpdateService.installApk(file);
+          if (!mounted) return;
+          if (retry.message.isNotEmpty) {
+            _toast('已下载完成。${retry.message}');
+          }
+        } else {
+          _toast('未开启“安装未知应用”权限，无法安装。可在系统设置中开启后，在“设置-检查更新”重新下载安装。');
+        }
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
       setState(() => _state = _UpdateState.done);
       if (result.message.isNotEmpty) {
         _toast('已下载完成。${result.message}');
@@ -178,6 +197,37 @@ class _UpdateContentDialogState extends State<_UpdateContentDialog> {
         _errorMsg = e.toString();
       });
     }
+  }
+
+  /// 引导用户开启“安装未知应用”权限（跳转系统设置页）
+  ///
+  /// 返回用户从设置页返回后是否已授权。
+  Future<bool> _requestInstallPermission() async {
+    final goSettings = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('需要开启“安装未知应用”权限'),
+        content: const Text(
+          '为完成版本升级，请在系统设置中允许本应用“安装未知应用”。\n\n'
+          '点击“去设置”后，找到“允许安装未知应用”并打开开关，然后返回本应用。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
+    if (goSettings != true || !mounted) return false;
+    // 跳转系统“安装未知应用”设置页（Android 8+）
+    final opened = await AppUpdateService.openInstallPermissionSettings();
+    return opened;
   }
 
   /// 暂停（保留已下载数据）

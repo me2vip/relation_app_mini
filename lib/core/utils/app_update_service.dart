@@ -16,6 +16,7 @@ import 'package:dio/dio.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// GitHub Release 元信息
 class GithubReleaseInfo {
@@ -377,10 +378,39 @@ class AppUpdateService {
 
   /// 调用系统安装器安装 APK
   ///
-  /// OpenFilex 内部会自动处理 FileProvider 与未知来源权限。
-  /// 返回值：[OpenResult]（含 type 与 message）。
+  /// Android 8+ 安装未知应用需要用户授权（REQUEST_INSTALL_PACKAGES）。
+  /// 这里先检查权限：
+  ///  - 已授权 → 直接拉起系统安装器
+  ///  - 未授权 → 返回 [OpenResult]（type=permissionDenied），由调用方引导用户去设置页开启
+  ///
+  /// 注意：不使用 permission_handler 的 request 弹窗——该权限属于特殊权限，
+  /// 系统不会弹授权对话框，必须跳转到系统“安装未知应用”设置页。
   static Future<OpenResult> installApk(File apkFile) async {
+    if (Platform.isAndroid) {
+      final hasPermission = await _hasInstallPermission();
+      if (!hasPermission) {
+        return const OpenResult(type: ResultType.permissionDenied);
+      }
+    }
     return await OpenFilex.open(apkFile.path);
+  }
+
+  /// 检查是否有“安装未知应用”权限（Android 8+）
+  ///
+  /// Android 8 以下系统无此权限概念，直接返回 true。
+  /// permission_handler 内部会处理版本兼容（旧版本自动视为已授权）。
+  static Future<bool> _hasInstallPermission() async {
+    try {
+      final status = await Permission.requestInstallPackages.status;
+      return status.isGranted;
+    } catch (_) {
+      return true; // 查询失败时不拦截，交给系统安装器处理
+    }
+  }
+
+  /// 打开系统“安装未知应用”设置页（用户授权后返回，可再次安装）
+  static Future<bool> openInstallPermissionSettings() async {
+    return await Permission.requestInstallPackages.request();
   }
 
   /// 版本比较：a > b（按 x.y.z 三段式比较）
