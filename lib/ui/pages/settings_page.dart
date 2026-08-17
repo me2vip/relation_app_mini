@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/app_provider.dart';
+import '../../core/widgets/update_dialog.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -124,6 +125,12 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                 },
               ),
+              _SettingsTile(
+                icon: Icons.system_update_rounded,
+                title: '检查更新',
+                subtitle: '检查是否有新版本可用',
+                onTap: () => _checkForUpdate(context),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -171,6 +178,15 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
   
+  /// 主动检查更新：先刷新 AppProvider 状态（供首页/设置页角标使用），
+  /// 再弹出手动更新对话框（下载 APK + 安装）。
+  Future<void> _checkForUpdate(BuildContext context) async {
+    final app = context.read<AppProvider>();
+    await app.checkForUpdate();
+    if (!mounted) return;
+    await UpdateDialog.show(context);
+  }
+
   void _showUpdateDialog(BuildContext context, AppProvider app) {
     showDialog(
       context: context,
@@ -222,8 +238,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              // 跳转到 GitHub Release 页面
-              // 或启动下载流程
+              UpdateDialog.show(context);
             },
             child: const Text('立即更新'),
           ),

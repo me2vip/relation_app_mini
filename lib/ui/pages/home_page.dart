@@ -25,13 +25,8 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _checkForUpdate();
-  }
-
-  void _checkForUpdate() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      UpdateDialog.show(context);
-    });
+    // 更新检查由 AppProvider 启动时静默完成（不弹窗），
+    // 有新版本时首页顶部会显示“升级”提示角标。
   }
 
   @override

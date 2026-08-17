@@ -5,8 +5,6 @@ import 'core/providers/contact_provider.dart';
 import 'core/providers/task_provider.dart';
 import 'core/providers/ai_provider.dart';
 import 'core/providers/atmosphere_provider.dart';
-import 'core/utils/app_update_service.dart';
-import 'core/widgets/update_dialog.dart';
 import 'ui/pages/splash_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/contacts_page.dart';
@@ -29,14 +27,7 @@ void main() async {
   await NotificationService.initialize();
   await NotificationService.requestPermissions();
   
-  // 检查应用更新
-  _checkForUpdate();
-  
   runApp(const MyApp());
-}
-
-Future<void> _checkForUpdate() async {
-  // 启动时静默检查，结果由 UpdateDialog 处理
 }
 
 class MyApp extends StatelessWidget {

@@ -151,7 +151,7 @@ class _AboutPageState extends State<AboutPage> {
             onTap: () => showLicensePage(
               context: context,
               applicationName: '社交塔子',
-              applicationVersion: 'v1.1.0',
+              applicationVersion: 'v$_version',
             ),
           ),
           const SizedBox(height: 40),
