@@ -788,22 +788,22 @@ class _SettingsView extends StatelessWidget {
             _SettingsTile(
               icon: Icons.notifications_outlined,
               title: '通知设置',
-              onTap: () {},
+              onTap: () => Navigator.pushNamed(context, '/notification-settings'),
             ),
             _SettingsTile(
               icon: Icons.security_outlined,
               title: '隐私设置',
-              onTap: () {},
+              onTap: () => Navigator.pushNamed(context, '/privacy-settings'),
             ),
             _SettingsTile(
               icon: Icons.color_lens_outlined,
               title: '氛围配置',
-              onTap: () {},
+              onTap: () => Navigator.pushNamed(context, '/atmosphere-config'),
             ),
             _SettingsTile(
               icon: Icons.info_outline,
               title: '关于',
-              onTap: () {},
+              onTap: () => Navigator.pushNamed(context, '/about'),
             ),
           ],
         ),
