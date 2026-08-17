@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../models/contact_group.dart';
 import '../../models/persona.dart';
 
 class PersonaEditPage extends StatefulWidget {
@@ -62,12 +63,12 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
     _roleController =
         TextEditingController(text: widget.persona.roleDescription ?? '');
     _styleController =
-        TextEditingController(text: widget.persona.postingStyle ?? '');
+        TextEditingController(text: widget.persona.postingStyle);
     _toneController =
-        TextEditingController(text: widget.persona.toneGuidance ?? '');
-    _personalityTags = List.from(widget.persona.personalityTags);
-    _contentTopics = List.from(widget.persona.contentTopics);
-    _tabooTopics = List.from(widget.persona.tabooTopics);
+        TextEditingController(text: widget.persona.toneGuidelines);
+    _personalityTags = List.from(widget.persona.traits);
+    _contentTopics = List.from(widget.persona.contentThemes);
+    _tabooTopics = List.from(widget.persona.forbiddenTopics);
   }
 
   @override
@@ -81,7 +82,7 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(widget.group.colorValue);
+    final color = Color(widget.group.color ?? 0xFF6366F1);
     return Scaffold(
       appBar: AppBar(
         title: const Text('人设设置'),
@@ -120,7 +121,7 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  widget.group.icon,
+                  widget.group.icon ?? '👥',
                   style: const TextStyle(fontSize: 22),
                 ),
               ),
@@ -136,7 +137,7 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
                 ),
               ),
               trailing: Text(
-                '${widget.group.contactIds.length} 人',
+                '${widget.group.name}',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
             ),
@@ -263,18 +264,12 @@ class _PersonaEditPageState extends State<PersonaEditPage> {
 
     final updated = widget.persona.copyWith(
       name: name,
-      roleDescription: _roleController.text.trim().isEmpty
-          ? null
-          : _roleController.text.trim(),
-      personalityTags: _personalityTags,
-      postingStyle: _styleController.text.trim().isEmpty
-          ? null
-          : _styleController.text.trim(),
-      contentTopics: _contentTopics,
-      toneGuidance: _toneController.text.trim().isEmpty
-          ? null
-          : _toneController.text.trim(),
-      tabooTopics: _tabooTopics,
+      roleDescription: _roleController.text.trim(),
+      traits: _personalityTags,
+      postingStyle: _styleController.text.trim(),
+      contentThemes: _contentTopics,
+      toneGuidelines: _toneController.text.trim(),
+      forbiddenTopics: _tabooTopics,
       updatedAt: DateTime.now(),
     );
 

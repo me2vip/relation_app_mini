@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/contact_provider.dart';
+import '../../models/contact_group.dart';
 import '../../models/persona.dart';
 import '../../models/contact.dart';
 
@@ -60,8 +61,8 @@ class GroupEditRoutePage extends StatelessWidget {
 class _GroupEditPageState extends State<GroupEditPage> {
   late final TextEditingController _nameController;
   late final TextEditingController _descController;
-  late String _icon;
-  late int _colorValue;
+  late String? _icon;
+  late int? _colorValue;
   late Set<String> _selectedContactIds;
 
   @override
@@ -70,8 +71,12 @@ class _GroupEditPageState extends State<GroupEditPage> {
     _nameController = TextEditingController(text: widget.group.name);
     _descController = TextEditingController(text: widget.group.description ?? '');
     _icon = widget.group.icon;
-    _colorValue = widget.group.colorValue;
-    _selectedContactIds = Set<String>.from(widget.group.contactIds);
+    _colorValue = widget.group.color;
+    _selectedContactIds = Set<String>.from(
+      context.read<ContactProvider>().contacts
+          .where((c) => c.groupIds.contains(widget.group.id))
+          .map((c) => c.id),
+    );
   }
 
   @override
@@ -312,12 +317,39 @@ class _GroupEditPageState extends State<GroupEditPage> {
           ? null
           : _descController.text.trim(),
       icon: _icon,
-      colorValue: _colorValue,
-      contactIds: _selectedContactIds.toList(),
+      color: _colorValue,
       updatedAt: DateTime.now(),
     );
 
+    // 保存联系人关联（分组编辑页返回后再同步）
+    _saveAsync(updated);
+  }
+
+  Future<void> _saveAsync(ContactGroup updated) async {
+    await _syncContactsToGroup();
+    if (!mounted) return;
     Navigator.pop(context, updated);
+  }
+
+  /// 将勾选的联系人写入分组（通过 ContactProvider 更新联系人的 groupIds）
+  Future<void> _syncContactsToGroup() async {
+    final contactProvider = context.read<ContactProvider>();
+    for (final contact in contactProvider.contacts) {
+      final inGroup = contact.groupIds.contains(widget.group.id);
+      final selected = _selectedContactIds.contains(contact.id);
+      if (inGroup && !selected) {
+        final remaining = contact.groupIds.where((g) => g != widget.group.id).toList();
+        await contactProvider.updateContact(contact.copyWith(
+          groupId: remaining.isEmpty ? '' : remaining.join(','),
+          updatedAt: DateTime.now(),
+        ));
+      } else if (!inGroup && selected) {
+        await contactProvider.updateContact(contact.copyWith(
+          groupId: [...contact.groupIds, widget.group.id].join(','),
+          updatedAt: DateTime.now(),
+        ));
+      }
+    }
   }
 
   Future<void> _delete() async {

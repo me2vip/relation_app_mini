@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/persona_provider.dart';
+import '../../core/providers/contact_provider.dart';
+import '../../models/contact_group.dart';
+import '../../models/contact.dart';
 import '../../models/persona.dart';
 import 'group_edit_page.dart';
 import 'persona_edit_page.dart';
@@ -94,8 +97,12 @@ class _PersonaPageState extends State<PersonaPage> {
                 _buildEmptyState()
               else
                 ...persona.groups.map((group) {
-                  final personaOfGroup = persona.getPersonaByGroup(group.id);
-                  final contactCount = group.contactIds.length;
+                  final personaOfGroup = persona.getPersonaByGroupId(group.id);
+                  final contactCount = context
+                      .watch<ContactProvider>()
+                      .contacts
+                      .where((c) => c.groupIds.contains(group.id))
+                      .length;
                   return _GroupCard(
                     group: group,
                     contactCount: contactCount,
@@ -181,7 +188,12 @@ class _PersonaPageState extends State<PersonaPage> {
 
     if (result is ContactGroup) {
       if (isNew) {
-        await provider.addGroup(result);
+        await provider.addGroup(
+          name: result.name,
+          description: result.description,
+          icon: result.icon,
+          color: result.color,
+        );
       } else {
         await provider.updateGroup(result);
       }
@@ -203,7 +215,7 @@ class _PersonaPageState extends State<PersonaPage> {
 
   Future<void> _openPersonaEdit(ContactGroup group) async {
     final provider = context.read<PersonaProvider>();
-    final existing = provider.getPersonaByGroup(group.id);
+    final existing = provider.getPersonaByGroupId(group.id);
     final persona = existing ?? provider.createEmptyPersona(group.id);
 
     final result = await Navigator.push<Object?>(
@@ -214,7 +226,21 @@ class _PersonaPageState extends State<PersonaPage> {
     );
 
     if (result is Persona) {
-      await provider.savePersona(result);
+      if (existing == null) {
+        await provider.addPersona(
+          name: result.name,
+          groupId: result.groupId,
+          roleDescription: result.roleDescription,
+          description: result.description,
+          traits: result.traits,
+          postingStyle: result.postingStyle,
+          contentThemes: result.contentThemes,
+          toneGuidelines: result.toneGuidelines,
+          forbiddenTopics: result.forbiddenTopics,
+        );
+      } else {
+        await provider.updatePersona(result);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('人设已保存')),
@@ -277,7 +303,7 @@ class _GroupCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = Color(group.colorValue);
+    final color = Color(group.color ?? 0xFF6366F1);
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -297,7 +323,7 @@ class _GroupCard extends StatelessWidget {
                 ),
                 alignment: Alignment.center,
                 child: Text(
-                  group.icon,
+                  group.icon ?? '👥',
                   style: const TextStyle(fontSize: 26),
                 ),
               ),

@@ -389,7 +389,7 @@ class AppUpdateService {
     if (Platform.isAndroid) {
       final hasPermission = await _hasInstallPermission();
       if (!hasPermission) {
-        return const OpenResult(type: ResultType.permissionDenied);
+        return OpenResult(type: ResultType.permissionDenied, message: 'permissionDenied');
       }
     }
     return await OpenFilex.open(apkFile.path);
@@ -410,7 +410,8 @@ class AppUpdateService {
 
   /// 打开系统“安装未知应用”设置页（用户授权后返回，可再次安装）
   static Future<bool> openInstallPermissionSettings() async {
-    return await Permission.requestInstallPackages.request();
+    final status = await Permission.requestInstallPackages.request();
+    return status.isGranted;
   }
 
   /// 版本比较：a > b（按 x.y.z 三段式比较）

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
 import '../../core/providers/persona_provider.dart';
+import '../../models/dynamic_post.dart';
 import '../../models/persona.dart';
 
 class DynamicPostPage extends StatefulWidget {
@@ -63,7 +64,8 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
               final post = provider.dynamicPosts[index];
               return _PostCard(
                 post: post,
-                groupName: provider.getGroupName(post.groupId),
+                groupName:
+                    provider.getGroupById(post.groupId)?.name ?? '未分组',
                 personaName: post.personaId != null
                     ? provider.getPersonaById(post.personaId!)?.name ?? '未命名人设'
                     : null,
@@ -109,7 +111,7 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
     );
 
     if (result != null && result.trim().isNotEmpty) {
-      await provider.saveDynamicPost(
+      await provider.updateDynamicPost(
         post.copyWith(content: result.trim(), updatedAt: DateTime.now()),
       );
       if (mounted) {
@@ -143,8 +145,9 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
     );
 
     if (confirmed == true) {
-      await provider.saveDynamicPost(
-        post.copyWith(status: PostStatus.published, updatedAt: DateTime.now()),
+      await provider.updateDynamicPost(
+        post.copyWith(
+            status: DynamicPostStatus.published, updatedAt: DateTime.now()),
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -177,7 +180,8 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
     );
 
     if (confirmed == true) {
-      await provider.createPostTask(post);
+      // 通过素材方式重建任务：将动态转为发圈任务
+      await provider.createTaskFromPost(post);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('发圈任务已生成')),
@@ -233,22 +237,22 @@ class _PostCard extends StatelessWidget {
 
   Color get _statusColor {
     switch (post.status) {
-      case PostStatus.draft:
+      case DynamicPostStatus.draft:
         return Colors.grey;
-      case PostStatus.published:
+      case DynamicPostStatus.published:
         return const Color(0xFF10B981);
-      case PostStatus.taskGenerated:
+      case DynamicPostStatus.taskCreated:
         return const Color(0xFFF59E0B);
     }
   }
 
   IconData get _statusIcon {
     switch (post.status) {
-      case PostStatus.draft:
+      case DynamicPostStatus.draft:
         return Icons.edit_outlined;
-      case PostStatus.published:
+      case DynamicPostStatus.published:
         return Icons.check_circle_outline;
-      case PostStatus.taskGenerated:
+      case DynamicPostStatus.taskCreated:
         return Icons.assignment_outlined;
     }
   }
@@ -328,18 +332,18 @@ class _PostCard extends StatelessWidget {
             const SizedBox(height: 12),
 
             // 配图
-            if (post.imagePaths.isNotEmpty)
+            if (post.mediaPaths.isNotEmpty)
               SizedBox(
                 height: 80,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  itemCount: post.imagePaths.length,
+                  itemCount: post.mediaPaths.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.file(
-                        File(post.imagePaths[index]),
+                        File(post.mediaPaths[index]),
                         width: 80,
                         height: 80,
                         fit: BoxFit.cover,
@@ -365,7 +369,7 @@ class _PostCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: post.status == PostStatus.published
+                    onPressed: post.status == DynamicPostStatus.published
                         ? null
                         : onMarkPublished,
                     icon: const Icon(Icons.check_circle_outline, size: 18),
@@ -374,7 +378,7 @@ class _PostCard extends StatelessWidget {
                 ),
                 Expanded(
                   child: TextButton.icon(
-                    onPressed: post.status == PostStatus.taskGenerated
+                    onPressed: post.status == DynamicPostStatus.taskCreated
                         ? null
                         : onCreateTask,
                     icon: const Icon(Icons.assignment_outlined, size: 18),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../core/providers/persona_provider.dart';
+import '../../models/temp_material.dart';
 import '../../models/persona.dart';
 
 class TempMaterialPage extends StatefulWidget {
@@ -162,7 +163,8 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
               else
                 ...provider.tempMaterials.map((m) => _MaterialHistoryCard(
                       material: m,
-                      groupName: provider.getGroupName(m.groupId ?? ''),
+                      groupName:
+                          provider.getGroupById(m.groupId)?.name ?? '未分组',
                       onDelete: () => provider.deleteTempMaterial(m.id),
                     )),
             ],
@@ -186,7 +188,7 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
           value: group.id,
           child: Row(
             children: [
-              Text(group.icon, style: const TextStyle(fontSize: 18)),
+              Text(group.icon ?? '👥', style: const TextStyle(fontSize: 18)),
               const SizedBox(width: 8),
               Text(group.name),
             ],
@@ -335,18 +337,26 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     setState(() => _isGenerating = true);
 
     try {
-      final material = TempMaterial(
-        id: '',
-        groupId: _selectedGroupId,
-        imagePaths: List.from(_imagePaths),
-        textDescription: _textController.text.trim().isEmpty
-            ? null
-            : _textController.text.trim(),
-        createdAt: DateTime.now(),
+      final textContent = _textController.text.trim();
+      final material = await provider.addTempMaterial(
+        groupId: _selectedGroupId!,
+        materialType: _imagePaths.isNotEmpty
+            ? TempMaterialType.image
+            : TempMaterialType.text,
+        filePath: _imagePaths.isNotEmpty ? _imagePaths.first : null,
+        textContent: textContent.isEmpty ? null : textContent,
       );
 
-      final caption = await provider.generateCaption(material);
-      _captionController.text = caption;
+      final caption = await provider.generateCaptionForMaterial(material.id);
+      if (caption != null) {
+        _captionController.text = caption;
+      } else if (provider.errorMessage != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(provider.errorMessage!)),
+          );
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -375,36 +385,34 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     }
 
     // 保存素材
-    final material = TempMaterial(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      groupId: _selectedGroupId,
-      imagePaths: List.from(_imagePaths),
-      textDescription: _textController.text.trim().isEmpty
+    final material = await provider.addTempMaterial(
+      groupId: _selectedGroupId!,
+      materialType: _imagePaths.isNotEmpty
+          ? TempMaterialType.image
+          : TempMaterialType.text,
+      filePath: _imagePaths.isNotEmpty ? _imagePaths.first : null,
+      textContent: _textController.text.trim().isEmpty
           ? null
           : _textController.text.trim(),
-      generatedCaption: caption,
-      createdAt: DateTime.now(),
     );
-    await provider.addTempMaterial(material);
 
-    // 创建动态文案并生成任务
-    final persona = provider.getPersonaByGroup(_selectedGroupId!);
-    final post = provider.createEmptyPost(
-      _selectedGroupId!,
-      personaId: persona?.id,
+    // 为素材生成发圈任务（内部会创建动态 + 社交任务）
+    // captionOverride 传入用户编辑后的文案
+    final result = await provider.generatePostingTask(
+      material.id,
+      captionOverride: caption,
     );
-    final updatedPost = post.copyWith(
-      content: caption,
-      imagePaths: List.from(_imagePaths),
-      updatedAt: DateTime.now(),
-    );
-    await provider.saveDynamicPost(updatedPost);
-    await provider.createPostTask(updatedPost);
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('发圈任务已生成！')),
-      );
+      if (result != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('发圈任务已生成！')),
+        );
+      } else if (provider.errorMessage != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(provider.errorMessage!)),
+        );
+      }
       // 清空当前输入
       setState(() {
         _imagePaths.clear();
@@ -469,29 +477,30 @@ class _MaterialHistoryCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (material.textDescription != null &&
-                material.textDescription!.isNotEmpty) ...[
+            if (material.textContent != null &&
+                material.textContent!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
-                material.textDescription!,
+                material.textContent!,
                 style: const TextStyle(fontSize: 14),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            if (material.imagePaths.isNotEmpty) ...[
+            if (material.filePath != null &&
+                material.materialType == TempMaterialType.image) ...[
               const SizedBox(height: 8),
               SizedBox(
                 height: 60,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  itemCount: material.imagePaths.length,
+                  itemCount: 1,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.file(
-                        File(material.imagePaths[index]),
+                        File(material.filePath!),
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
@@ -501,8 +510,8 @@ class _MaterialHistoryCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (material.generatedCaption != null &&
-                material.generatedCaption!.isNotEmpty) ...[
+            if (material.aiCaption != null &&
+                material.aiCaption!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -512,7 +521,7 @@ class _MaterialHistoryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  material.generatedCaption!,
+                  material.aiCaption!,
                   style: const TextStyle(fontSize: 13),
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,

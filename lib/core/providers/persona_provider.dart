@@ -465,14 +465,52 @@ class PersonaProvider extends ChangeNotifier {
 
   // ========== 生成发朋友圈任务 ==========
 
+  /// 从已有的动态直接生成发圈任务（动态文案页入口）
+  Future<bool> createTaskFromPost(DynamicPost post) async {
+    final group = getGroupById(post.groupId);
+    final now = DateTime.now();
+    try {
+      final task = SocialTask(
+        id: _uuid.v4(),
+        contactId: 'group:${post.groupId}',
+        contactName: group?.name ?? '分组',
+        title: '人设发圈：${post.content.length > 12 ? post.content.substring(0, 12) : post.content}',
+        description: post.content,
+        type: TaskType.socialInteraction,
+        status: TaskStatus.pending,
+        scheduledAt: post.scheduledAt ?? now.add(const Duration(hours: 1)),
+        priority: 0,
+        metadata: {
+          'personaId': post.personaId,
+          'groupId': post.groupId,
+          'dynamicPostId': post.id,
+        },
+      );
+      await DatabaseService.saveTask(task);
+      await updateDynamicPost(
+        post.copyWith(status: DynamicPostStatus.taskCreated, updatedAt: now),
+      );
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// 将已配文案的素材生成为发朋友圈任务
   /// 返回创建的动态和任务；contact 由主界面持有联系人列表，用于任务关联
+  /// [captionOverride]：用户手动编辑后的文案（优先于 AI 生成的文案）
   Future<(DynamicPost, SocialTask)?> generatePostingTask(
     String materialId, {
     DateTime? scheduledAt,
+    String? captionOverride,
   }) async {
     final material = _tempMaterials.firstWhere((m) => m.id == materialId);
-    if (material.aiCaption == null || material.aiCaption!.isEmpty) {
+    final effectiveCaption = (captionOverride != null && captionOverride.trim().isNotEmpty)
+        ? captionOverride.trim()
+        : material.aiCaption;
+    if (effectiveCaption == null || effectiveCaption.isEmpty) {
       _errorMessage = '请先为素材生成文案';
       notifyListeners();
       return null;
@@ -500,7 +538,7 @@ class PersonaProvider extends ChangeNotifier {
         personaId: persona.id,
         groupId: material.groupId,
         contentType: contentType,
-        content: material.aiCaption!,
+        content: effectiveCaption,
         mediaPaths: material.filePath != null ? [material.filePath!] : [],
         status: DynamicPostStatus.taskCreated,
         scheduledAt: scheduledAt,
@@ -509,8 +547,11 @@ class PersonaProvider extends ChangeNotifier {
       );
       await DatabaseService.saveDynamicPost(post);
 
-      // 2. 更新素材状态
-      final updatedMaterial = material.copyWith(status: TempMaterialStatus.taskCreated);
+      // 2. 更新素材状态（保留用户编辑的文案）
+      final updatedMaterial = material.copyWith(
+        status: TempMaterialStatus.taskCreated,
+        aiCaption: effectiveCaption,
+      );
       await DatabaseService.saveTempMaterial(updatedMaterial);
 
       // 3. 生成社交任务（发朋友圈任务）
@@ -519,7 +560,7 @@ class PersonaProvider extends ChangeNotifier {
         contactId: 'group:${material.groupId}',
         contactName: group?.name ?? '分组',
         title: '人设发圈：${persona.name}',
-        description: material.aiCaption!,
+        description: effectiveCaption,
         type: TaskType.socialInteraction,
         status: TaskStatus.pending,
         scheduledAt: scheduledAt ?? now.add(const Duration(hours: 1)),
