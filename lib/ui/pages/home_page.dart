@@ -10,6 +10,7 @@ import '../../services/storage_service.dart';
 import '../widgets/contact_card.dart';
 import '../widgets/task_card.dart';
 import '../../core/widgets/update_dialog.dart';
+import 'settings_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -38,12 +39,12 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       body: IndexedStack(
         index: _currentIndex,
-        children: const [
-          _DashboardView(),
-          _ContactsView(),
-          _TasksView(),
-          _AIDashboardView(),
-          _SettingsView(),
+        children: [
+          const _DashboardView(),
+          const _ContactsView(),
+          const _TasksView(),
+          const _AIDashboardView(),
+          const SettingsPage(),
         ],
       ),
       bottomNavigationBar: Container(
@@ -756,82 +757,6 @@ class _AIFeatureCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _SettingsView extends StatelessWidget {
-  const _SettingsView();
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              '设置',
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 30),
-            _SettingsTile(
-              icon: Icons.smart_toy_outlined,
-              title: 'AI模型配置',
-              onTap: () => Navigator.pushNamed(context, '/ai'),
-            ),
-            _SettingsTile(
-              icon: Icons.notifications_outlined,
-              title: '通知设置',
-              onTap: () => Navigator.pushNamed(context, '/notification-settings'),
-            ),
-            _SettingsTile(
-              icon: Icons.security_outlined,
-              title: '隐私设置',
-              onTap: () => Navigator.pushNamed(context, '/privacy-settings'),
-            ),
-            _SettingsTile(
-              icon: Icons.color_lens_outlined,
-              title: '氛围配置',
-              onTap: () => Navigator.pushNamed(context, '/atmosphere-config'),
-            ),
-            _SettingsTile(
-              icon: Icons.info_outline,
-              title: '关于',
-              onTap: () => Navigator.pushNamed(context, '/about'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsTile extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final VoidCallback onTap;
-
-  const _SettingsTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        leading: Icon(icon, color: const Color(0xFF6366F1)),
-        title: Text(title),
-        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-        onTap: onTap,
       ),
     );
   }
