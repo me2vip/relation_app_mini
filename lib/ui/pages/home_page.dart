@@ -9,7 +9,7 @@ import '../../models/task.dart';
 import '../../services/storage_service.dart';
 import '../widgets/contact_card.dart';
 import '../widgets/task_card.dart';
-import '../widgets/update_dialog.dart';
+import '../../core/widgets/update_dialog.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -29,13 +29,7 @@ class _HomePageState extends State<HomePage> {
 
   void _checkForUpdate() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final appProvider = context.read<AppProvider>();
-      if (appProvider.hasUpdate && appProvider.latestRelease != null) {
-        showDialog(
-          context: context,
-          builder: (_) => UpdateDialog(release: appProvider.latestRelease!),
-        );
-      }
+      UpdateDialog.show(context);
     });
   }
 
@@ -219,22 +213,57 @@ class _DashboardView extends StatelessWidget {
                       ),
                       Consumer<AppProvider>(
                         builder: (context, app, _) {
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: Text(
-                              'v${app.currentVersion}',
-                              style: const TextStyle(
-                                color: Color(0xFF6366F1),
-                                fontWeight: FontWeight.w500,
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (app.hasUpdate) ...[
+                                GestureDetector(
+                                  onTap: () => UpdateDialog.show(context),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.red.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.system_update, size: 16, color: Colors.red),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          '升级',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF6366F1).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  'v${app.currentVersion}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF6366F1),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           );
                         },
                       ),

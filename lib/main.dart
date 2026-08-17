@@ -6,6 +6,7 @@ import 'core/providers/task_provider.dart';
 import 'core/providers/ai_provider.dart';
 import 'core/providers/atmosphere_provider.dart';
 import 'core/utils/app_update_service.dart';
+import 'core/widgets/update_dialog.dart';
 import 'ui/pages/splash_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/contacts_page.dart';
@@ -35,14 +36,7 @@ void main() async {
 }
 
 Future<void> _checkForUpdate() async {
-  try {
-    final outcome = await AppUpdateService.checkForUpdate();
-    if (outcome.result == UpdateCheckResult.hasUpdate) {
-      debugPrint('发现新版本: ${outcome.releaseInfo?.version}');
-    }
-  } catch (e) {
-    debugPrint('检查更新失败: $e');
-  }
+  // 启动时静默检查，结果由 UpdateDialog 处理
 }
 
 class MyApp extends StatelessWidget {

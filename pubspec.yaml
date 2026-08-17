@@ -60,6 +60,9 @@ dependencies:
   # 日期时间
   intl: ^0.20.2
 
+  # Markdown 渲染
+  flutter_markdown: ^0.7.7+2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
