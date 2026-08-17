@@ -124,16 +124,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   );
                 },
               ),
-              _SettingsTile(
-                icon: Icons.description_outlined,
-                title: '使用条款',
-                onTap: () => Navigator.pushNamed(context, '/about'),
-              ),
-              _SettingsTile(
-                icon: Icons.privacy_tip_outlined,
-                title: '隐私政策',
-                onTap: () => Navigator.pushNamed(context, '/about'),
-              ),
             ],
           ),
           const SizedBox(height: 20),
