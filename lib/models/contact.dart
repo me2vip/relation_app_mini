@@ -114,6 +114,8 @@ class Contact {
   final List<String> tags;
   final String? atmosphereProfile;
   final String? goalRelation;
+  /// 联系人所属分组ID（逗号分隔，支持多对多关系）
+  final String? groupId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<Interaction> interactions;
@@ -127,10 +129,17 @@ class Contact {
     required this.tags,
     this.atmosphereProfile,
     this.goalRelation,
+    this.groupId,
     required this.createdAt,
     required this.updatedAt,
     this.interactions = const [],
   });
+
+  /// 获取联系人所属所有分组ID列表
+  List<String> get groupIds {
+    if (groupId == null || groupId!.isEmpty) return [];
+    return groupId!.split(',').where((g) => g.isNotEmpty).toList();
+  }
 
   Contact copyWith({
     String? id,
@@ -141,6 +150,7 @@ class Contact {
     List<String>? tags,
     String? atmosphereProfile,
     String? goalRelation,
+    String? groupId,
     DateTime? createdAt,
     DateTime? updatedAt,
     List<Interaction>? interactions,
@@ -153,6 +163,7 @@ class Contact {
     tags: tags ?? this.tags,
     atmosphereProfile: atmosphereProfile ?? this.atmosphereProfile,
     goalRelation: goalRelation ?? this.goalRelation,
+    groupId: groupId ?? this.groupId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     interactions: interactions ?? this.interactions,
@@ -167,6 +178,7 @@ class Contact {
     'tags': tags,
     'atmosphereProfile': atmosphereProfile,
     'goalRelation': goalRelation,
+    'groupId': groupId,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
     'interactions': interactions.map((i) => i.toJson()).toList(),
@@ -181,6 +193,7 @@ class Contact {
     tags: List<String>.from(json['tags'] as List),
     atmosphereProfile: json['atmosphereProfile'] as String?,
     goalRelation: json['goalRelation'] as String?,
+    groupId: json['groupId'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
     interactions: (json['interactions'] as List?)?.map((i) => Interaction.fromJson(i)).toList() ?? [],

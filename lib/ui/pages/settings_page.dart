@@ -76,6 +76,18 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 20),
           _SettingsSection(
+            title: '人设设置',
+            children: [
+              _SettingsTile(
+                icon: Icons.face_retouching_natural,
+                title: '人设管理',
+                subtitle: '按分组打造朋友圈人设，AI 智能配文案',
+                onTap: () => Navigator.pushNamed(context, '/persona'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _SettingsSection(
             title: '隐私设置',
             children: [
               _SettingsTile(

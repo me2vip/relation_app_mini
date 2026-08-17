@@ -124,8 +124,9 @@ class AppUpdateService {
       connectTimeout: _connectTimeout,
       receiveTimeout: _receiveTimeout,
       headers: {
-        'Accept': 'application/vnd.github+json',
-        // GitHub API 要求 UA，否则可能被限流
+        // 重要：不要设置 'Accept: application/vnd.github+json'。
+        // 实测该仓库 API 在携带此 Accept 头时 releases 列表返回空数组 []，
+        // 导致检查更新永远报“未找到可用的 Release”。不设置 Accept 才能拿到完整列表。
         'User-Agent': 'relation-app-mini-updater/1.0',
       },
     ));
@@ -144,16 +145,28 @@ class AppUpdateService {
 
     final dio = _createDio();
     try {
-      final resp = await dio.get(_apiReleases);
-      if (resp.statusCode != 200) {
+      // 防御性重试：GitHub API 偶发返回空数组/504，重试 3 次（1s/2s 退避）
+      dynamic respData;
+      int statusCode = 0;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+          await Future.delayed(Duration(seconds: attempt));
+        }
+        final resp = await dio.get(_apiReleases);
+        statusCode = resp.statusCode ?? 0;
+        respData = resp.data;
+        if (statusCode == 200 && respData is List && respData.isNotEmpty) break;
+      }
+
+      if (statusCode != 200) {
         return UpdateCheckOutcome(
           result: UpdateCheckResult.error,
-          errorMessage: 'GitHub API 返回状态码 ${resp.statusCode}',
+          errorMessage: 'GitHub API 返回状态码 $statusCode',
           currentVersion: currentVersion,
         );
       }
 
-      final list = (resp.data is List) ? (resp.data as List) : <dynamic>[];
+      final list = (respData is List) ? (respData as List) : <dynamic>[];
 
       // 过滤草稿（draft）。
       // 修复（自动更新下载旧版 bug）：不再使用 `releases/latest` 端点，
