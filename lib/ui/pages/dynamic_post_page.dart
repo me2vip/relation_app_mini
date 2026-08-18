@@ -64,8 +64,12 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
               final post = provider.dynamicPosts[index];
               return _PostCard(
                 post: post,
-                groupName:
-                    provider.getGroupById(post.groupId)?.name ?? '未分组',
+                groupNames: post.groupIds.isEmpty
+                    ? '全局'
+                    : provider
+                        .getGroupsByIds(post.groupIds)
+                        .map((g) => g.name)
+                        .join('、'),
                 personaName: post.personaId != null
                     ? provider.getPersonaById(post.personaId!)?.name ?? '未命名人设'
                     : null,
@@ -218,7 +222,7 @@ class _DynamicPostPageState extends State<DynamicPostPage> {
 
 class _PostCard extends StatelessWidget {
   final DynamicPost post;
-  final String groupName;
+  final String groupNames;
   final String? personaName;
   final VoidCallback onEdit;
   final VoidCallback onMarkPublished;
@@ -227,7 +231,7 @@ class _PostCard extends StatelessWidget {
 
   const _PostCard({
     required this.post,
-    required this.groupName,
+    required this.groupNames,
     required this.personaName,
     required this.onEdit,
     required this.onMarkPublished,
@@ -277,7 +281,7 @@ class _PostCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    groupName,
+                    groupNames,
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF6366F1),

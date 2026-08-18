@@ -50,7 +50,6 @@ class TaskGeneratorService {
 联系人姓名：${contact.name}
 当前关系：${_getRelationshipDescription(contact.level)}
 目标关系：$goal
-${contact.atmosphereProfile != null ? '对方了解的信息程度：${contact.atmosphereProfile}' : ''}
 
 请生成具体的、可执行的社交任务，包括：
 1. 具体的行动（如：发消息、打电话、约见面等）

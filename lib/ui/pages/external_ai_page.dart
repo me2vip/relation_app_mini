@@ -230,9 +230,6 @@ class _ExternalAIPageState extends State<ExternalAIPage> {
     if (contact.goalRelation != null) {
       buffer.writeln('目标关系: ${contact.goalRelation}');
     }
-    if (contact.atmosphereProfile != null) {
-      buffer.writeln('氛围信息: ${contact.atmosphereProfile}');
-    }
     
     _contextController.text = buffer.toString();
   }

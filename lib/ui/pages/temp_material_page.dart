@@ -4,8 +4,9 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../../core/providers/persona_provider.dart';
 import '../../models/temp_material.dart';
-import '../../models/persona.dart';
 
+/// 临时素材页：用户添加照片/文字 → 选择可暴露的分组 → AI 按各分组人设分别配文案
+/// → 为每个分组生成发圈任务
 class TempMaterialPage extends StatefulWidget {
   const TempMaterialPage({super.key});
 
@@ -14,16 +15,20 @@ class TempMaterialPage extends StatefulWidget {
 }
 
 class _TempMaterialPageState extends State<TempMaterialPage> {
-  String? _selectedGroupId;
   final List<String> _imagePaths = [];
   final _textController = TextEditingController();
-  final _captionController = TextEditingController();
+  final _captionControllers = <String, TextEditingController>{}; // groupId -> controller
+  final Set<String> _selectedGroupIds = {};
   bool _isGenerating = false;
+  bool _hasGenerated = false;
+  String? _currentMaterialId;
 
   @override
   void dispose() {
     _textController.dispose();
-    _captionController.dispose();
+    for (final c in _captionControllers.values) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -38,7 +43,29 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // 选择分组
+              // 说明卡片
+              Card(
+                color: const Color(0xFF6366F1).withOpacity(0.08),
+                child: const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.add_photo_alternate_outlined,
+                          color: Color(0xFF6366F1)),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '添加照片/文字，选择可暴露的分组，AI 会按各分组人设分别配文案',
+                          style: TextStyle(fontSize: 13, color: Colors.grey),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // 选择分组（多选）
               _buildGroupSelector(provider),
               const SizedBox(height: 16),
 
@@ -61,7 +88,7 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
 
               // AI 配文案按钮
               FilledButton.icon(
-                onPressed: _isGenerating ? null : () => _generateCaption(provider),
+                onPressed: _isGenerating ? null : () => _generateCaptions(provider),
                 icon: _isGenerating
                     ? const SizedBox(
                         width: 18,
@@ -72,7 +99,7 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
                         ),
                       )
                     : const Icon(Icons.auto_awesome),
-                label: Text(_isGenerating ? 'AI 生成中...' : 'AI 配文案'),
+                label: Text(_isGenerating ? 'AI 生成中...' : 'AI 按分组配文案'),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(
@@ -82,25 +109,69 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
               ),
               const SizedBox(height: 16),
 
-              // 生成的文案（可编辑）
-              if (_captionController.text.isNotEmpty || _isGenerating)
-                TextField(
-                  controller: _captionController,
-                  decoration: const InputDecoration(
-                    labelText: '生成文案（可编辑）',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.edit_outlined),
-                  ),
-                  maxLines: 5,
+              // 各分组文案（可编辑）
+              if (_hasGenerated) ...[
+                const Text(
+                  '分组文案（可编辑）',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
-              const SizedBox(height: 16),
-
-              // 生成发圈任务按钮
-              if (_captionController.text.isNotEmpty)
+                const SizedBox(height: 8),
+                ..._selectedGroupIds.map((groupId) {
+                  final group = provider.getGroupById(groupId);
+                  final persona = provider.getPersonaByGroupId(groupId);
+                  final controller = _captionControllers[groupId] ??
+                      (TextEditingController()
+                        ..text = '');
+                  _captionControllers.putIfAbsent(groupId, () => controller);
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                group?.icon ?? '👥',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                group?.name ?? '未分组',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              if (persona != null) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  '人设：${persona.name}',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: controller,
+                            maxLines: 4,
+                            decoration: const InputDecoration(
+                              border: OutlineInputBorder(),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => _createPostTask(provider),
+                  onPressed: () => _createTasks(provider),
                   icon: const Icon(Icons.send_outlined),
-                  label: const Text('生成发圈任务'),
+                  label: const Text('为各分组生成发圈任务'),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: const Color(0xFF6366F1),
                     minimumSize: const Size.fromHeight(48),
@@ -110,6 +181,7 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
                     ),
                   ),
                 ),
+              ],
               const SizedBox(height: 24),
 
               // 历史素材
@@ -151,9 +223,7 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
                           const SizedBox(height: 8),
                           Text(
                             '暂无历史素材',
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                            ),
+                            style: TextStyle(color: Colors.grey.shade500),
                           ),
                         ],
                       ),
@@ -163,8 +233,10 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
               else
                 ...provider.tempMaterials.map((m) => _MaterialHistoryCard(
                       material: m,
-                      groupName:
-                          provider.getGroupById(m.groupId)?.name ?? '未分组',
+                      groupNames: provider
+                          .getGroupsByIds(m.groupIds)
+                          .map((g) => g.name)
+                          .join('、'),
                       onDelete: () => provider.deleteTempMaterial(m.id),
                     )),
             ],
@@ -175,27 +247,48 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
   }
 
   Widget _buildGroupSelector(PersonaProvider provider) {
-    return DropdownButtonFormField<String>(
-      value: _selectedGroupId,
-      decoration: const InputDecoration(
-        labelText: '选择分组',
-        hintText: '选择素材关联的联系人分组',
-        border: OutlineInputBorder(),
-        prefixIcon: Icon(Icons.group_outlined),
-      ),
-      items: provider.groups.map((group) {
-        return DropdownMenuItem(
-          value: group.id,
-          child: Row(
-            children: [
-              Text(group.icon ?? '👥', style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
-              Text(group.name),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '选择可暴露的分组（可多选）',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        if (provider.groups.isEmpty)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                '暂无分组，请先在「人设管理」中创建分组',
+                style: TextStyle(color: Colors.grey.shade600),
+              ),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: provider.groups.map((group) {
+              final selected = _selectedGroupIds.contains(group.id);
+              return FilterChip(
+                label: Text('${group.icon ?? '👥'} ${group.name}'),
+                selected: selected,
+                onSelected: (v) {
+                  setState(() {
+                    if (v) {
+                      _selectedGroupIds.add(group.id);
+                    } else {
+                      _selectedGroupIds.remove(group.id);
+                    }
+                  });
+                },
+                selectedColor: const Color(0xFF6366F1).withOpacity(0.15),
+                checkmarkColor: const Color(0xFF6366F1),
+              );
+            }).toList(),
           ),
-        );
-      }).toList(),
-      onChanged: (value) => setState(() => _selectedGroupId = value),
+      ],
     );
   }
 
@@ -326,10 +419,10 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     }
   }
 
-  Future<void> _generateCaption(PersonaProvider provider) async {
-    if (_selectedGroupId == null) {
+  Future<void> _generateCaptions(PersonaProvider provider) async {
+    if (_selectedGroupIds.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择分组')),
+        const SnackBar(content: Text('请先选择至少一个分组')),
       );
       return;
     }
@@ -339,23 +432,30 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     try {
       final textContent = _textController.text.trim();
       final material = await provider.addTempMaterial(
-        groupId: _selectedGroupId!,
+        groupIds: _selectedGroupIds.toList(),
         materialType: _imagePaths.isNotEmpty
             ? TempMaterialType.image
             : TempMaterialType.text,
-        filePath: _imagePaths.isNotEmpty ? _imagePaths.first : null,
+        filePaths: List.from(_imagePaths),
         textContent: textContent.isEmpty ? null : textContent,
       );
+      _currentMaterialId = material.id;
 
-      final caption = await provider.generateCaptionForMaterial(material.id);
-      if (caption != null) {
-        _captionController.text = caption;
-      } else if (provider.errorMessage != null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage!)),
+      final captions =
+          await provider.generateCaptionsForMaterial(material.id);
+      if (captions.isNotEmpty) {
+        for (final entry in captions.entries) {
+          final controller = _captionControllers.putIfAbsent(
+            entry.key,
+            () => TextEditingController(),
           );
+          controller.text = entry.value;
         }
+        setState(() => _hasGenerated = true);
+      } else if (provider.errorMessage != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(provider.errorMessage!)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -368,69 +468,65 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     }
   }
 
-  Future<void> _createPostTask(PersonaProvider provider) async {
-    if (_selectedGroupId == null) {
+  Future<void> _createTasks(PersonaProvider provider) async {
+    if (_currentMaterialId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择分组')),
+        const SnackBar(content: Text('请先生成文案')),
       );
       return;
     }
 
-    final caption = _captionController.text.trim();
-    if (caption.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('文案不能为空')),
-      );
-      return;
+    // 将用户编辑后的文案写回素材
+    final material = provider.tempMaterials
+        .firstWhere((m) => m.id == _currentMaterialId!);
+    final captions = <String, String>{};
+    for (final entry in _captionControllers.entries) {
+      if (entry.value.text.trim().isNotEmpty) {
+        captions[entry.key] = entry.value.text.trim();
+      }
     }
-
-    // 保存素材
-    final material = await provider.addTempMaterial(
-      groupId: _selectedGroupId!,
-      materialType: _imagePaths.isNotEmpty
-          ? TempMaterialType.image
-          : TempMaterialType.text,
-      filePath: _imagePaths.isNotEmpty ? _imagePaths.first : null,
-      textContent: _textController.text.trim().isEmpty
-          ? null
-          : _textController.text.trim(),
+    final updated = material.copyWith(
+      captionsByGroup: captions,
+      status: TempMaterialStatus.captioned,
     );
+    await provider.updateTempMaterial(updated);
 
-    // 为素材生成发圈任务（内部会创建动态 + 社交任务）
-    // captionOverride 传入用户编辑后的文案
-    final result = await provider.generatePostingTask(
-      material.id,
-      captionOverride: caption,
-    );
+    final (posts, tasks) =
+        await provider.generatePostingTasks(material.id);
 
     if (mounted) {
-      if (result != null) {
+      if (tasks.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('发圈任务已生成！')),
+          SnackBar(content: Text('已为 ${tasks.length} 个分组生成发圈任务！')),
         );
+        // 清空当前输入
+        setState(() {
+          _imagePaths.clear();
+          _textController.clear();
+          for (final c in _captionControllers.values) {
+            c.clear();
+          }
+          _selectedGroupIds.clear();
+          _hasGenerated = false;
+          _currentMaterialId = null;
+        });
       } else if (provider.errorMessage != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(provider.errorMessage!)),
         );
       }
-      // 清空当前输入
-      setState(() {
-        _imagePaths.clear();
-        _textController.clear();
-        _captionController.clear();
-      });
     }
   }
 }
 
 class _MaterialHistoryCard extends StatelessWidget {
   final TempMaterial material;
-  final String groupName;
+  final String groupNames;
   final VoidCallback onDelete;
 
   const _MaterialHistoryCard({
     required this.material,
-    required this.groupName,
+    required this.groupNames,
     required this.onDelete,
   });
 
@@ -453,11 +549,24 @@ class _MaterialHistoryCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    groupName,
+                    groupNames.isEmpty ? '全局' : groupNames,
                     style: const TextStyle(
                       fontSize: 12,
                       color: Color(0xFF6366F1),
                     ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    material.statusName,
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                   ),
                 ),
                 const Spacer(),
@@ -487,20 +596,19 @@ class _MaterialHistoryCard extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ],
-            if (material.filePath != null &&
-                material.materialType == TempMaterialType.image) ...[
+            if (material.filePaths.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
                 height: 60,
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
-                  itemCount: 1,
+                  itemCount: material.filePaths.length,
                   separatorBuilder: (_, __) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
                     return ClipRRect(
                       borderRadius: BorderRadius.circular(8),
                       child: Image.file(
-                        File(material.filePath!),
+                        File(material.filePaths[index]),
                         width: 60,
                         height: 60,
                         fit: BoxFit.cover,
@@ -510,23 +618,30 @@ class _MaterialHistoryCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (material.aiCaption != null &&
-                material.aiCaption!.isNotEmpty) ...[
+            if (material.captionsByGroup.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6366F1).withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
+              ...material.captionsByGroup.entries.take(2).map((entry) {
+                return Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    '${entry.value}',
+                    style: const TextStyle(fontSize: 13),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }),
+              if (material.captionsByGroup.length > 2)
+                Text(
+                  '…共 ${material.captionsByGroup.length} 个分组的文案',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
                 ),
-                child: Text(
-                  material.aiCaption!,
-                  style: const TextStyle(fontSize: 13),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
             ],
           ],
         ),

@@ -9,12 +9,12 @@ import '../models/dynamic_post.dart';
 import '../models/temp_material.dart';
 import '../models/task.dart';
 import '../models/ai_config.dart';
-import '../models/atmosphere.dart';
+import '../models/channel.dart';
 
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'relation_app_mini.db';
-  static const int _dbVersion = 3;
+  static const int _dbVersion = 4;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -43,7 +43,6 @@ class DatabaseService {
         avatar TEXT,
         level INTEGER NOT NULL DEFAULT 1,
         tags TEXT,
-        atmosphere_profile TEXT,
         goal_relation TEXT,
         group_id TEXT,
         created_at TEXT NOT NULL,
@@ -136,28 +135,57 @@ class DatabaseService {
       )
     ''');
 
-    // 氛围配置表
+    // 社交途径表
     await db.execute('''
-      CREATE TABLE atmosphere_profiles (
+      CREATE TABLE social_channels (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
+        icon TEXT,
         description TEXT,
-        items TEXT NOT NULL,
+        is_default INTEGER DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
     ''');
 
-    // 联系人氛围设置表
+    // 联系人-社交途径关联表
     await db.execute('''
-      CREATE TABLE contact_atmosphere (
+      CREATE TABLE contact_channel_links (
+        id TEXT PRIMARY KEY,
+        contact_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        account TEXT NOT NULL,
+        remark TEXT,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id),
+        FOREIGN KEY (channel_id) REFERENCES social_channels(id)
+      )
+    ''');
+
+    // 人设信息项表
+    await db.execute('''
+      CREATE TABLE persona_info_items (
+        id TEXT PRIMARY KEY,
+        persona_id TEXT NOT NULL,
+        category TEXT NOT NULL,
+        label TEXT NOT NULL,
+        content TEXT NOT NULL,
+        display_order INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (persona_id) REFERENCES personas(id)
+      )
+    ''');
+
+    // 联系人-人设关联表
+    await db.execute('''
+      CREATE TABLE contact_persona_links (
         id TEXT PRIMARY KEY,
         contact_id TEXT NOT NULL UNIQUE,
-        profile_id TEXT NOT NULL,
-        exposed_fields TEXT NOT NULL,
-        hidden_fields TEXT NOT NULL,
-        use_custom_settings INTEGER DEFAULT 0,
-        FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+        persona_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (contact_id) REFERENCES contacts(id),
+        FOREIGN KEY (persona_id) REFERENCES personas(id)
       )
     ''');
 
@@ -359,6 +387,71 @@ class DatabaseService {
       await db.execute('CREATE INDEX IF NOT EXISTS idx_temp_materials_group_id ON temp_materials(group_id)');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_temp_materials_status ON temp_materials(status)');
     }
+    if (oldVersion < 4) {
+      // 删除旧氛围表
+      await db.execute('DROP TABLE IF EXISTS contact_atmosphere');
+
+      // 社交途径表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS social_channels (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          icon TEXT,
+          description TEXT,
+          is_default INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+
+      // 联系人-社交途径关联表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS contact_channel_links (
+          id TEXT PRIMARY KEY,
+          contact_id TEXT NOT NULL,
+          channel_id TEXT NOT NULL,
+          account TEXT NOT NULL,
+          remark TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (contact_id) REFERENCES contacts(id),
+          FOREIGN KEY (channel_id) REFERENCES social_channels(id)
+        )
+      ''');
+
+      // 人设信息项表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS persona_info_items (
+          id TEXT PRIMARY KEY,
+          persona_id TEXT NOT NULL,
+          category TEXT NOT NULL,
+          label TEXT NOT NULL,
+          content TEXT NOT NULL,
+          display_order INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (persona_id) REFERENCES personas(id)
+        )
+      ''');
+
+      // 联系人-人设关联表
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS contact_persona_links (
+          id TEXT PRIMARY KEY,
+          contact_id TEXT NOT NULL UNIQUE,
+          persona_id TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (contact_id) REFERENCES contacts(id),
+          FOREIGN KEY (persona_id) REFERENCES personas(id)
+        )
+      ''');
+
+      // 旧 personas 表保留原结构，新列通过 ALTER 添加（已存在则跳过）
+      final personaCols = await db.rawQuery('PRAGMA table_info(personas)');
+      final hasGroupId = personaCols.any((c) => c['name'] == 'group_id');
+      if (!hasGroupId) {
+        await db.execute('ALTER TABLE personas ADD COLUMN group_id TEXT');
+      }
+    }
   }
 
   // ========== 联系人操作 ==========
@@ -381,7 +474,6 @@ class DatabaseService {
         level: ContactLevel.values[map['level'] as int],
         methods: methods,
         tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-        atmosphereProfile: map['atmosphere_profile'] as String?,
         goalRelation: map['goal_relation'] as String?,
         groupId: map['group_id'] as String?,
         createdAt: DateTime.parse(map['created_at'] as String),
@@ -412,7 +504,6 @@ class DatabaseService {
       level: ContactLevel.values[map['level'] as int],
       methods: methods,
       tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-      atmosphereProfile: map['atmosphere_profile'] as String?,
       goalRelation: map['goal_relation'] as String?,
       groupId: map['group_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
@@ -431,7 +522,6 @@ class DatabaseService {
         'avatar': contact.avatar,
         'level': contact.level.index,
         'tags': contact.tags.join(','),
-        'atmosphere_profile': contact.atmosphereProfile,
         'goal_relation': contact.goalRelation,
         'group_id': contact.groupId,
         'created_at': contact.createdAt.toIso8601String(),
@@ -461,7 +551,6 @@ class DatabaseService {
         level: ContactLevel.values[map['level'] as int],
         methods: methods,
         tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-        atmosphereProfile: map['atmosphere_profile'] as String?,
         goalRelation: map['goal_relation'] as String?,
         groupId: map['group_id'] as String?,
         createdAt: DateTime.parse(map['created_at'] as String),
@@ -735,81 +824,86 @@ class DatabaseService {
     );
   }
 
-  // ========== 氛围配置操作 ==========
+  // ========== 社交途径操作 ==========
   
-  static Future<List<AtmosphereProfile>> getAllAtmosphereProfiles() async {
+  static Future<List<SocialChannel>> getAllChannels() async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
-      'atmosphere_profiles',
-      orderBy: 'created_at DESC',
+      'social_channels',
+      orderBy: 'created_at ASC',
     );
-    return maps.map((m) {
-      final itemsJson = jsonDecode(m['items'] as String) as Map<String, dynamic>;
-      final items = itemsJson.map(
-        (k, v) => MapEntry(k, (v as List).map((i) => AtmosphereItem.fromJson(i)).toList()),
-      );
-      return AtmosphereProfile(
-        id: m['id'] as String,
-        name: m['name'] as String,
-        description: m['description'] as String?,
-        items: items,
-        createdAt: DateTime.parse(m['created_at'] as String),
-        updatedAt: DateTime.parse(m['updated_at'] as String),
-      );
-    }).toList();
+    return maps.map((m) => SocialChannel(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      icon: m['icon'] as String? ?? '📱',
+      description: m['description'] as String?,
+      isDefault: (m['is_default'] as int?) == 1,
+      createdAt: DateTime.parse(m['created_at'] as String),
+      updatedAt: DateTime.parse(m['updated_at'] as String),
+    )).toList();
   }
 
-  static Future<void> saveAtmosphereProfile(AtmosphereProfile profile) async {
+  static Future<void> saveChannel(SocialChannel channel) async {
     final db = await database;
     await db.insert(
-      'atmosphere_profiles',
+      'social_channels',
       {
-        'id': profile.id,
-        'name': profile.name,
-        'description': profile.description,
-        'items': jsonEncode(profile.items.map(
-          (k, v) => MapEntry(k, v.map((i) => i.toJson()).toList()),
-        )),
-        'created_at': profile.createdAt.toIso8601String(),
-        'updated_at': profile.updatedAt.toIso8601String(),
+        'id': channel.id,
+        'name': channel.name,
+        'icon': channel.icon,
+        'description': channel.description,
+        'is_default': channel.isDefault ? 1 : 0,
+        'created_at': channel.createdAt.toIso8601String(),
+        'updated_at': channel.updatedAt.toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  static Future<ContactAtmosphereSetting?> getContactAtmosphere(String contactId) async {
+  static Future<void> deleteChannel(String id) async {
+    final db = await database;
+    await db.delete('social_channels', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ========== 联系人-社交途径关联操作 ==========
+
+  static Future<List<ContactChannelLink>> getContactChannelLinks(String contactId) async {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
-      'contact_atmosphere',
+      'contact_channel_links',
       where: 'contact_id = ?',
       whereArgs: [contactId],
+      orderBy: 'created_at ASC',
     );
-    if (maps.isEmpty) return null;
-    final m = maps.first;
-    return ContactAtmosphereSetting(
+    return maps.map((m) => ContactChannelLink(
       id: m['id'] as String,
       contactId: m['contact_id'] as String,
-      profileId: m['profile_id'] as String,
-      exposedFields: List<String>.from(jsonDecode(m['exposed_fields'] as String)),
-      hiddenFields: List<String>.from(jsonDecode(m['hidden_fields'] as String)),
-      useCustomSettings: (m['use_custom_settings'] as int?) == 1,
-    );
+      channelId: m['channel_id'] as String,
+      account: m['account'] as String,
+      remark: m['remark'] as String?,
+      createdAt: DateTime.parse(m['created_at'] as String),
+    )).toList();
   }
 
-  static Future<void> saveContactAtmosphere(ContactAtmosphereSetting setting) async {
+  static Future<void> saveContactChannelLink(ContactChannelLink link) async {
     final db = await database;
     await db.insert(
-      'contact_atmosphere',
+      'contact_channel_links',
       {
-        'id': setting.id,
-        'contact_id': setting.contactId,
-        'profile_id': setting.profileId,
-        'exposed_fields': jsonEncode(setting.exposedFields),
-        'hidden_fields': jsonEncode(setting.hiddenFields),
-        'use_custom_settings': setting.useCustomSettings ? 1 : 0,
+        'id': link.id,
+        'contact_id': link.contactId,
+        'channel_id': link.channelId,
+        'account': link.account,
+        'remark': link.remark,
+        'created_at': link.createdAt.toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+  }
+
+  static Future<void> deleteContactChannelLink(String id) async {
+    final db = await database;
+    await db.delete('contact_channel_links', where: 'id = ?', whereArgs: [id]);
   }
 
   // ========== 任务调度操作 ==========
@@ -910,7 +1004,12 @@ class DatabaseService {
       'personas',
       orderBy: 'created_at ASC',
     );
-    return maps.map((m) => _personaFromMap(m)).toList();
+    final personas = <Persona>[];
+    for (final m in maps) {
+      final infoItems = await getPersonaInfoItems(m['id'] as String);
+      personas.add(_personaFromMap(m, infoItems));
+    }
+    return personas;
   }
 
   static Future<Persona?> getPersona(String id) async {
@@ -921,7 +1020,8 @@ class DatabaseService {
       whereArgs: [id],
     );
     if (maps.isEmpty) return null;
-    return _personaFromMap(maps.first);
+    final infoItems = await getPersonaInfoItems(id);
+    return _personaFromMap(maps.first, infoItems);
   }
 
   static Future<Persona?> getPersonaByGroupId(String groupId) async {
@@ -932,22 +1032,18 @@ class DatabaseService {
       whereArgs: [groupId],
     );
     if (maps.isEmpty) return null;
-    return _personaFromMap(maps.first);
+    final infoItems = await getPersonaInfoItems(maps.first['id'] as String);
+    return _personaFromMap(maps.first, infoItems);
   }
 
-  static Persona _personaFromMap(Map<String, dynamic> m) => Persona(
+  static Persona _personaFromMap(Map<String, dynamic> m, List<PersonaInfoItem> infoItems) => Persona(
     id: m['id'] as String,
     name: m['name'] as String,
     description: m['description'] as String?,
-    groupId: m['group_id'] as String,
-    roleDescription: m['role_description'] as String,
-    traits: (m['traits'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-    postingStyle: m['posting_style'] as String? ?? '',
-    contentThemes: (m['content_themes'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-    toneGuidelines: m['tone_guidelines'] as String? ?? '',
-    forbiddenTopics: (m['forbidden_topics'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
+    groupId: m['group_id'] as String?,
     createdAt: DateTime.parse(m['created_at'] as String),
     updatedAt: DateTime.parse(m['updated_at'] as String),
+    infoItems: infoItems,
   );
 
   static Future<void> savePersona(Persona persona) async {
@@ -958,23 +1054,106 @@ class DatabaseService {
         'id': persona.id,
         'name': persona.name,
         'description': persona.description,
-        'group_id': persona.groupId,
-        'role_description': persona.roleDescription,
-        'traits': persona.traits.join(','),
-        'posting_style': persona.postingStyle,
-        'content_themes': persona.contentThemes.join(','),
-        'tone_guidelines': persona.toneGuidelines,
-        'forbidden_topics': persona.forbiddenTopics.join(','),
+        'group_id': persona.groupId ?? '',
+        'role_description': '',
         'created_at': persona.createdAt.toIso8601String(),
         'updated_at': persona.updatedAt.toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+    // 级联保存信息项
+    for (final item in persona.infoItems) {
+      await savePersonaInfoItem(item);
+    }
   }
 
   static Future<void> deletePersona(String id) async {
     final db = await database;
+    await db.delete('persona_info_items', where: 'persona_id = ?', whereArgs: [id]);
     await db.delete('personas', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ========== 人设信息项操作 ==========
+
+  static Future<List<PersonaInfoItem>> getPersonaInfoItems(String personaId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'persona_info_items',
+      where: 'persona_id = ?',
+      whereArgs: [personaId],
+      orderBy: 'display_order ASC, created_at ASC',
+    );
+    return maps.map((m) => PersonaInfoItem(
+      id: m['id'] as String,
+      personaId: m['persona_id'] as String,
+      category: m['category'] as String,
+      label: m['label'] as String,
+      content: m['content'] as String,
+      displayOrder: m['display_order'] as int? ?? 0,
+      createdAt: DateTime.parse(m['created_at'] as String),
+      updatedAt: DateTime.parse(m['updated_at'] as String),
+    )).toList();
+  }
+
+  static Future<void> savePersonaInfoItem(PersonaInfoItem item) async {
+    final db = await database;
+    await db.insert(
+      'persona_info_items',
+      {
+        'id': item.id,
+        'persona_id': item.personaId,
+        'category': item.category,
+        'label': item.label,
+        'content': item.content,
+        'display_order': item.displayOrder,
+        'created_at': item.createdAt.toIso8601String(),
+        'updated_at': item.updatedAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deletePersonaInfoItem(String id) async {
+    final db = await database;
+    await db.delete('persona_info_items', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ========== 联系人-人设关联操作 ==========
+
+  static Future<ContactPersonaLink?> getContactPersonaLink(String contactId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'contact_persona_links',
+      where: 'contact_id = ?',
+      whereArgs: [contactId],
+    );
+    if (maps.isEmpty) return null;
+    final m = maps.first;
+    return ContactPersonaLink(
+      id: m['id'] as String,
+      contactId: m['contact_id'] as String,
+      personaId: m['persona_id'] as String,
+      updatedAt: DateTime.parse(m['updated_at'] as String),
+    );
+  }
+
+  static Future<void> saveContactPersonaLink(ContactPersonaLink link) async {
+    final db = await database;
+    await db.insert(
+      'contact_persona_links',
+      {
+        'id': link.id,
+        'contact_id': link.contactId,
+        'persona_id': link.personaId,
+        'updated_at': link.updatedAt.toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteContactPersonaLink(String contactId) async {
+    final db = await database;
+    await db.delete('contact_persona_links', where: 'contact_id = ?', whereArgs: [contactId]);
   }
 
   // ========== 人设动态操作 ==========
@@ -1023,8 +1202,10 @@ class DatabaseService {
 
   static DynamicPost _dynamicPostFromMap(Map<String, dynamic> m) => DynamicPost(
     id: m['id'] as String,
-    personaId: m['persona_id'] as String,
-    groupId: m['group_id'] as String,
+    personaId: (m['persona_id'] as String?)?.isNotEmpty == true
+        ? m['persona_id'] as String?
+        : null,
+    groupIds: (m['group_id'] as String?)?.split(',').where((g) => g.isNotEmpty).toList() ?? [],
     contentType: DynamicContentType.values[m['content_type'] as int],
     content: m['content'] as String,
     mediaPaths: (m['media_paths'] as String?)?.split('\n').where((p) => p.isNotEmpty).toList() ?? [],
@@ -1042,8 +1223,8 @@ class DatabaseService {
       'dynamic_posts',
       {
         'id': post.id,
-        'persona_id': post.personaId,
-        'group_id': post.groupId,
+        'persona_id': post.personaId ?? '',
+        'group_id': post.groupIds.join(','),
         'content_type': post.contentType.index,
         'content': post.content,
         'media_paths': post.mediaPaths.join('\n'),
@@ -1107,12 +1288,14 @@ class DatabaseService {
 
   static TempMaterial _tempMaterialFromMap(Map<String, dynamic> m) => TempMaterial(
     id: m['id'] as String,
-    groupId: m['group_id'] as String,
-    personaId: m['persona_id'] as String?,
+    groupIds: (m['group_id'] as String?)?.split(',').where((g) => g.isNotEmpty).toList() ?? [],
     materialType: TempMaterialType.values[m['material_type'] as int],
-    filePath: m['file_path'] as String?,
+    filePaths: (m['file_path'] as String?)?.split('\n').where((p) => p.isNotEmpty).toList() ?? [],
     textContent: m['text_content'] as String?,
     aiCaption: m['ai_caption'] as String?,
+    captionsByGroup: m['captions_by_group'] != null
+        ? Map<String, String>.from(jsonDecode(m['captions_by_group'] as String))
+        : const {},
     status: TempMaterialStatus.values[m['status'] as int],
     createdAt: DateTime.parse(m['created_at'] as String),
   );
@@ -1123,12 +1306,13 @@ class DatabaseService {
       'temp_materials',
       {
         'id': material.id,
-        'group_id': material.groupId,
-        'persona_id': material.personaId,
+        'group_id': material.groupIds.join(','),
+        'persona_id': null,
         'material_type': material.materialType.index,
-        'file_path': material.filePath,
+        'file_path': material.filePaths.join('\n'),
         'text_content': material.textContent,
         'ai_caption': material.aiCaption,
+        'captions_by_group': jsonEncode(material.captionsByGroup),
         'status': material.status.index,
         'created_at': material.createdAt.toIso8601String(),
       },

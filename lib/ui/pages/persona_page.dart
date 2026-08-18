@@ -216,7 +216,7 @@ class _PersonaPageState extends State<PersonaPage> {
   Future<void> _openPersonaEdit(ContactGroup group) async {
     final provider = context.read<PersonaProvider>();
     final existing = provider.getPersonaByGroupId(group.id);
-    final persona = existing ?? provider.createEmptyPersona(group.id);
+    final persona = existing ?? provider.createEmptyPersona(groupId: group.id);
 
     final result = await Navigator.push<Object?>(
       context,
@@ -230,13 +230,7 @@ class _PersonaPageState extends State<PersonaPage> {
         await provider.addPersona(
           name: result.name,
           groupId: result.groupId,
-          roleDescription: result.roleDescription,
           description: result.description,
-          traits: result.traits,
-          postingStyle: result.postingStyle,
-          contentThemes: result.contentThemes,
-          toneGuidelines: result.toneGuidelines,
-          forbiddenTopics: result.forbiddenTopics,
         );
       } else {
         await provider.updatePersona(result);

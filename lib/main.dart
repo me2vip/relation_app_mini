@@ -4,8 +4,8 @@ import 'core/providers/app_provider.dart';
 import 'core/providers/contact_provider.dart';
 import 'core/providers/task_provider.dart';
 import 'core/providers/ai_provider.dart';
-import 'core/providers/atmosphere_provider.dart';
 import 'core/providers/persona_provider.dart';
+import 'core/providers/channel_provider.dart';
 import 'ui/pages/splash_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/contacts_page.dart';
@@ -16,23 +16,23 @@ import 'ui/pages/contact_detail_page.dart';
 import 'ui/pages/ai_chat_page.dart';
 import 'ui/pages/external_ai_page.dart';
 import 'ui/pages/about_page.dart';
-import 'ui/pages/atmosphere_config_page.dart';
-import 'ui/pages/privacy_settings_page.dart';
 import 'ui/pages/notification_settings_page.dart';
+import 'ui/pages/privacy_settings_page.dart';
 import 'ui/pages/persona_page.dart';
 import 'ui/pages/group_edit_page.dart';
 import 'ui/pages/persona_edit_page.dart';
 import 'ui/pages/temp_material_page.dart';
 import 'ui/pages/dynamic_post_page.dart';
+import 'ui/pages/channel_manage_page.dart';
 import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // 初始化通知服务
   await NotificationService.initialize();
   await NotificationService.requestPermissions();
-  
+
   runApp(const MyApp());
 }
 
@@ -47,8 +47,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ContactProvider()),
         ChangeNotifierProvider(create: (_) => TaskProvider()),
         ChangeNotifierProvider(create: (_) => AIProvider()),
-        ChangeNotifierProvider(create: (_) => AtmosphereProvider()),
         ChangeNotifierProvider(create: (_) => PersonaProvider()),
+        ChangeNotifierProvider(create: (_) => ChannelProvider()),
       ],
       child: MaterialApp(
         title: '社交塔子',
@@ -87,7 +87,6 @@ class MyApp extends StatelessWidget {
           '/ai-chat': (context) => const AIChatPage(),
           '/external-ai': (context) => const ExternalAIPage(),
           '/about': (context) => const AboutPage(),
-          '/atmosphere-config': (context) => const AtmosphereConfigPage(),
           '/privacy-settings': (context) => const PrivacySettingsPage(),
           '/notification-settings': (context) => const NotificationSettingsPage(),
           '/persona': (context) => const PersonaPage(),
@@ -95,6 +94,7 @@ class MyApp extends StatelessWidget {
           '/persona-edit': (context) => const PersonaEditRoutePage(),
           '/temp-material': (context) => const TempMaterialPage(),
           '/dynamic-post': (context) => const DynamicPostPage(),
+          '/channels': (context) => const ChannelManagePage(),
         },
       ),
     );

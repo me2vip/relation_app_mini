@@ -111,9 +111,8 @@ class Contact {
   final String? avatar;
   final ContactLevel level;
   final List<ContactMethod> methods;
-  final List<String> tags;
-  final String? atmosphereProfile;
-  final String? goalRelation;
+ final List<String> tags;
+ final String? goalRelation;
   /// 联系人所属分组ID（逗号分隔，支持多对多关系）
   final String? groupId;
   final DateTime createdAt;
@@ -126,9 +125,8 @@ class Contact {
     this.avatar,
     required this.level,
     required this.methods,
-    required this.tags,
-    this.atmosphereProfile,
-    this.goalRelation,
+   required this.tags,
+   this.goalRelation,
     this.groupId,
     required this.createdAt,
     required this.updatedAt,
@@ -141,15 +139,14 @@ class Contact {
     return groupId!.split(',').where((g) => g.isNotEmpty).toList();
   }
 
-  Contact copyWith({
+ Contact copyWith({
     String? id,
     String? name,
     String? avatar,
     ContactLevel? level,
     List<ContactMethod>? methods,
-    List<String>? tags,
-    String? atmosphereProfile,
-    String? goalRelation,
+   List<String>? tags,
+   String? goalRelation,
     String? groupId,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -161,8 +158,7 @@ class Contact {
     level: level ?? this.level,
     methods: methods ?? this.methods,
     tags: tags ?? this.tags,
-    atmosphereProfile: atmosphereProfile ?? this.atmosphereProfile,
-    goalRelation: goalRelation ?? this.goalRelation,
+   goalRelation: goalRelation ?? this.goalRelation,
     groupId: groupId ?? this.groupId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -175,9 +171,8 @@ class Contact {
     'avatar': avatar,
     'level': level.index,
     'methods': methods.map((m) => m.toJson()).toList(),
-    'tags': tags,
-    'atmosphereProfile': atmosphereProfile,
-    'goalRelation': goalRelation,
+   'tags': tags,
+   'goalRelation': goalRelation,
     'groupId': groupId,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
@@ -190,9 +185,8 @@ class Contact {
     avatar: json['avatar'] as String?,
     level: ContactLevel.values[json['level'] as int],
     methods: (json['methods'] as List).map((m) => ContactMethod.fromJson(m)).toList(),
-    tags: List<String>.from(json['tags'] as List),
-    atmosphereProfile: json['atmosphereProfile'] as String?,
-    goalRelation: json['goalRelation'] as String?,
+   tags: List<String>.from(json['tags'] as List),
+   goalRelation: json['goalRelation'] as String?,
     groupId: json['groupId'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),

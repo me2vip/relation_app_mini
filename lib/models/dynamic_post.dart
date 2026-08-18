@@ -23,8 +23,8 @@ enum DynamicPostStatus {
 /// 人设动态（用户按照人设发布的朋友圈/说说/动态）
 class DynamicPost {
   final String id;
-  final String personaId;
-  final String groupId;
+  final String? personaId; // 关联人设（可为空 = 全局发布）
+  final List<String> groupIds; // 可见分组（多分组）
   final DynamicContentType contentType;
   final String content; // 文案
   final List<String> mediaPaths; // 图片/视频路径
@@ -35,8 +35,8 @@ class DynamicPost {
 
   DynamicPost({
     required this.id,
-    required this.personaId,
-    required this.groupId,
+    this.personaId,
+    this.groupIds = const [],
     required this.contentType,
     required this.content,
     this.mediaPaths = const [],
@@ -49,7 +49,7 @@ class DynamicPost {
   DynamicPost copyWith({
     String? id,
     String? personaId,
-    String? groupId,
+    List<String>? groupIds,
     DynamicContentType? contentType,
     String? content,
     List<String>? mediaPaths,
@@ -61,7 +61,7 @@ class DynamicPost {
       DynamicPost(
         id: id ?? this.id,
         personaId: personaId ?? this.personaId,
-        groupId: groupId ?? this.groupId,
+        groupIds: groupIds ?? this.groupIds,
         contentType: contentType ?? this.contentType,
         content: content ?? this.content,
         mediaPaths: mediaPaths ?? this.mediaPaths,
@@ -74,7 +74,7 @@ class DynamicPost {
   Map<String, dynamic> toJson() => {
         'id': id,
         'personaId': personaId,
-        'groupId': groupId,
+        'groupIds': groupIds,
         'contentType': contentType.index,
         'content': content,
         'mediaPaths': mediaPaths,
@@ -86,8 +86,8 @@ class DynamicPost {
 
   factory DynamicPost.fromJson(Map<String, dynamic> json) => DynamicPost(
         id: json['id'] as String,
-        personaId: json['personaId'] as String,
-        groupId: json['groupId'] as String,
+        personaId: json['personaId'] as String?,
+        groupIds: List<String>.from(json['groupIds'] as List? ?? []),
         contentType: DynamicContentType.values[json['contentType'] as int],
         content: json['content'] as String,
         mediaPaths: List<String>.from(json['mediaPaths'] as List? ?? []),
@@ -101,18 +101,25 @@ class DynamicPost {
 
   String get contentTypeName {
     switch (contentType) {
-      case DynamicContentType.text: return '文字';
-      case DynamicContentType.image: return '图片';
-      case DynamicContentType.video: return '视频';
-      case DynamicContentType.mixed: return '图文';
+      case DynamicContentType.text:
+        return '文字';
+      case DynamicContentType.image:
+        return '图片';
+      case DynamicContentType.video:
+        return '视频';
+      case DynamicContentType.mixed:
+        return '图文';
     }
   }
 
   String get statusName {
     switch (status) {
-      case DynamicPostStatus.draft: return '草稿';
-      case DynamicPostStatus.published: return '已发布';
-      case DynamicPostStatus.taskCreated: return '已生成任务';
+      case DynamicPostStatus.draft:
+        return '草稿';
+      case DynamicPostStatus.published:
+        return '已发布';
+      case DynamicPostStatus.taskCreated:
+        return '已生成任务';
     }
   }
 }
