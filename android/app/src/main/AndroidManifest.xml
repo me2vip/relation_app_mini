@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    
+
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
@@ -8,15 +8,22 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <!-- Android 8+ 安装下载的 APK 需要“安装未知应用”权限 -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-    
+    <!--
+      安装未知来源 APK：
+      - 此处不声明 REQUEST_INSTALL_PACKAGES 权限（参考社交教练 manifest 的做法）
+      - 不声明该权限时，open_filex 会通过 Intent.ACTION_VIEW + MIME 类型
+        application/vnd.android.package-archive 触发系统安装器（传统路径）
+      - 安装授权完全在系统安装器界面完成，用户体验与"浏览器下载 APK 后点击安装"一致
+      - 一旦声明 REQUEST_INSTALL_PACKAGES，系统会触发 PackageInstaller API 校验
+      - 社交教练 manifest 中写成 REEQUEST_INSTALL_PACKAGE（故意拼错），效果等同
+    -->
+
     <application
         android:label="社交塔子"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:requestLegacyExternalStorage="true">
-        
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -34,11 +41,11 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2"/>
-        
+
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
@@ -48,9 +55,9 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
-        
+
     </application>
-    
+
     <queries>
         <intent>
             <action android:name="android.intent.action.VIEW"/>
@@ -60,7 +67,7 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="http"/>
         </intent>
-        <!-- Android 11+ 包可见性：允许查询/调用系统 APK 安装器 -->
+        <!-- Android 11+ 包可见性:允许查询/调用系统 APK 安装器 -->
         <intent>
             <action android:name="android.intent.action.INSTALL_PACKAGE"/>
             <data android:scheme="package"/>
