@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../models/contact.dart';
 import 'contact_detail_page.dart';
+import 'contact_edit_page.dart';
 
 class ContactsPage extends StatefulWidget {
   const ContactsPage({super.key});
@@ -136,7 +137,10 @@ class _ContactsPageState extends State<ContactsPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddContactDialog(context),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ContactEditPage()),
+        ),
         icon: const Icon(Icons.add),
         label: const Text('添加联系人'),
       ),
@@ -240,74 +244,6 @@ class _ContactsPageState extends State<ContactsPage> {
     );
   }
 
-  void _showAddContactDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    var selectedLevel = ContactLevel.normal;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: const Text('添加联系人'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: '姓名',
-                      hintText: '输入联系人姓名',
-                    ),
-                    autofocus: true,
-                  ),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<ContactLevel>(
-                    value: selectedLevel,
-                    decoration: const InputDecoration(
-                      labelText: '分层',
-                    ),
-                    items: ContactLevel.values.map((level) {
-                      return DropdownMenuItem(
-                        value: level,
-                        child: Text(_getLevelName(level)),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() => selectedLevel = value);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('取消'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (nameController.text.isNotEmpty) {
-                      final provider = context.read<ContactProvider>();
-                      final contact = provider.createEmptyContact().copyWith(
-                        name: nameController.text,
-                        level: selectedLevel,
-                      );
-                      provider.addContact(contact);
-                      Navigator.pop(context);
-                    }
-                  },
-                  child: const Text('添加'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 }
 
 class _ContactListItem extends StatelessWidget {

@@ -192,3 +192,4 @@ class ContactProvider extends ChangeNotifier {
     );
   }
 }
+

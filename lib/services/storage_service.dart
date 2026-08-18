@@ -46,9 +46,14 @@ class DatabaseService {
         goal_relation TEXT,
         group_id TEXT,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        metadata TEXT
       )
     ''');
+    // 尝试添加 metadata 列（兼容已存在的数据库）
+    try {
+      await db.execute("ALTER TABLE contacts ADD COLUMN metadata TEXT");
+    } catch (_) {}
 
     // 联系方式表
     await db.execute('''
@@ -467,19 +472,9 @@ class DatabaseService {
     for (final map in maps) {
       final methods = await getContactMethods(map['id'] as String);
       final interactions = await getContactInteractions(map['id'] as String);
-      contacts.add(Contact(
-        id: map['id'] as String,
-        name: map['name'] as String,
-        avatar: map['avatar'] as String?,
-        level: ContactLevel.values[map['level'] as int],
-        methods: methods,
-        tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-        goalRelation: map['goal_relation'] as String?,
-        groupId: map['group_id'] as String?,
-        createdAt: DateTime.parse(map['created_at'] as String),
-        updatedAt: DateTime.parse(map['updated_at'] as String),
-        interactions: interactions,
-      ));
+      // 从 metadata JSON 恢复完整字段；无 metadata 时退化兼容
+      Contact contact = _contactFromMapWithMeta(map, methods, interactions);
+      contacts.add(contact);
     }
     return contacts;
   }
@@ -496,15 +491,81 @@ class DatabaseService {
     final map = maps.first;
     final methods = await getContactMethods(id);
     final interactions = await getContactInteractions(id);
-    
+    return _contactFromMapWithMeta(map, methods, interactions);
+  }
+
+  /// 从数据库 map + metadata JSON 构造完整 Contact
+  static Contact _contactFromMapWithMeta(
+    Map<String, dynamic> map,
+    List<ContactMethod> methods,
+    List<Interaction> interactions,
+  ) {
+    Map<String, dynamic>? meta;
+    final rawMeta = map['metadata'] as String?;
+    if (rawMeta != null && rawMeta.isNotEmpty) {
+      try {
+        meta = Map<String, dynamic>.from(
+          (rawMeta.startsWith('{') && rawMeta.endsWith('}'))
+              ? jsonDecode(rawMeta)
+              : {},
+        );
+      } catch (_) { meta = null; }
+    }
+    // 优先从 metadata 读取扩展字段
     return Contact(
       id: map['id'] as String,
       name: map['name'] as String,
       avatar: map['avatar'] as String?,
       level: ContactLevel.values[map['level'] as int],
+      gender: meta != null && meta['gender'] != null
+          ? Gender.values[meta['gender'] as int]
+          : Gender.unknown,
+      birthday: meta != null && meta['birthday'] != null
+          ? DateTime.tryParse(meta['birthday'] as String)
+          : null,
+      age: meta != null ? meta['age'] as int? : null,
+      ethnicity: meta != null ? meta['ethnicity'] as String? : null,
+      religion: meta != null ? meta['religion'] as String? : null,
+      politicalAffiliation: meta != null ? meta['politicalAffiliation'] as String? : null,
+      maritalStatus: meta != null && meta['maritalStatus'] != null
+          ? MaritalStatus.values[meta['maritalStatus'] as int]
+          : MaritalStatus.unknown,
+      educationLevel: meta != null && meta['educationLevel'] != null
+          ? EducationLevel.values[meta['educationLevel'] as int]
+          : EducationLevel.unknown,
+      school: meta != null ? meta['school'] as String? : null,
+      major: meta != null ? meta['major'] as String? : null,
+      personalityTags: meta != null ? meta['personalityTags'] as String? : null,
+      personalityDesc: meta != null ? meta['personalityDesc'] as String? : null,
+      characterTags: meta != null ? meta['characterTags'] as String? : null,
+      taboos: meta != null ? meta['taboos'] as String? : null,
+      values: meta != null ? meta['values'] as String? : null,
+      hobbies: meta != null ? meta['hobbies'] as String? : null,
+      strengths: meta != null ? meta['strengths'] as String? : null,
+      weaknesses: meta != null ? meta['weaknesses'] as String? : null,
+      fears: meta != null ? meta['fears'] as String? : null,
+      desires: meta != null ? meta['desires'] as String? : null,
+      skills: meta != null ? meta['skills'] as String? : null,
+      tastePreferences: meta != null ? meta['tastePreferences'] as String? : null,
+      industry: meta != null ? meta['industry'] as String? : null,
+      company: meta != null ? meta['company'] as String? : null,
+      position: meta != null ? meta['position'] as String? : null,
+      workExperience: meta != null ? meta['workExperience'] as String? : null,
+      homeAddress: meta != null ? meta['homeAddress'] as String? : null,
+      familySituation: meta != null ? meta['familySituation'] as String? : null,
+      familyEconomicStatus: meta != null ? meta['familyEconomicStatus'] as String? : null,
+      familyEmotionalStatus: meta != null ? meta['familyEmotionalStatus'] as String? : null,
+      taTrustLevel: meta != null ? (meta['taTrustLevel'] as int? ?? 5) : 5,
+      myTrustLevel: meta != null ? (meta['myTrustLevel'] as int? ?? 5) : 5,
+      socialCircles: meta != null ? meta['socialCircles'] as String? : null,
+      currentStatus: meta != null ? meta['currentStatus'] as String? : null,
+      moneyDesireLevel: meta != null ? meta['moneyDesireLevel'] as String? : null,
+      ambitionLevel: meta != null ? meta['ambitionLevel'] as String? : null,
+      shortTermGoals: meta != null ? meta['shortTermGoals'] as String? : null,
+      longTermGoals: meta != null ? meta['longTermGoals'] as String? : null,
+      goalRelation: map['goal_relation'] as String?,
       methods: methods,
       tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-      goalRelation: map['goal_relation'] as String?,
       groupId: map['group_id'] as String?,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
@@ -512,8 +573,55 @@ class DatabaseService {
     );
   }
 
+  /// 将扩展字段序列化为 metadata JSON（不含基础列已有的字段）
+  static String _contactToMetadata(Contact c) {
+    final meta = <String, dynamic>{
+      'gender': c.gender.index,
+      'birthday': c.birthday?.toIso8601String(),
+      'age': c.age,
+      'ethnicity': c.ethnicity,
+      'religion': c.religion,
+      'politicalAffiliation': c.politicalAffiliation,
+      'maritalStatus': c.maritalStatus.index,
+      'educationLevel': c.educationLevel.index,
+      'school': c.school,
+      'major': c.major,
+      'personalityTags': c.personalityTags,
+      'personalityDesc': c.personalityDesc,
+      'characterTags': c.characterTags,
+      'taboos': c.taboos,
+      'values': c.values,
+      'hobbies': c.hobbies,
+      'strengths': c.strengths,
+      'weaknesses': c.weaknesses,
+      'fears': c.fears,
+      'desires': c.desires,
+      'skills': c.skills,
+      'tastePreferences': c.tastePreferences,
+      'industry': c.industry,
+      'company': c.company,
+      'position': c.position,
+      'workExperience': c.workExperience,
+      'homeAddress': c.homeAddress,
+      'familySituation': c.familySituation,
+      'familyEconomicStatus': c.familyEconomicStatus,
+      'familyEmotionalStatus': c.familyEmotionalStatus,
+      'taTrustLevel': c.taTrustLevel,
+      'myTrustLevel': c.myTrustLevel,
+      'socialCircles': c.socialCircles,
+      'currentStatus': c.currentStatus,
+      'moneyDesireLevel': c.moneyDesireLevel,
+      'ambitionLevel': c.ambitionLevel,
+      'shortTermGoals': c.shortTermGoals,
+      'longTermGoals': c.longTermGoals,
+    };
+    return jsonEncode(meta);
+  }
+
   static Future<void> saveContact(Contact contact) async {
     final db = await database;
+    // 完整 Contact 序列化为 metadata JSON
+    final metaJson = _contactToMetadata(contact);
     await db.insert(
       'contacts',
       {
@@ -526,6 +634,7 @@ class DatabaseService {
         'group_id': contact.groupId,
         'created_at': contact.createdAt.toIso8601String(),
         'updated_at': contact.updatedAt.toIso8601String(),
+        'metadata': metaJson,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -544,19 +653,7 @@ class DatabaseService {
       if (!groupIds.contains(groupId)) continue;
       final methods = await getContactMethods(map['id'] as String);
       final interactions = await getContactInteractions(map['id'] as String);
-      contacts.add(Contact(
-        id: map['id'] as String,
-        name: map['name'] as String,
-        avatar: map['avatar'] as String?,
-        level: ContactLevel.values[map['level'] as int],
-        methods: methods,
-        tags: (map['tags'] as String?)?.split(',').where((t) => t.isNotEmpty).toList() ?? [],
-        goalRelation: map['goal_relation'] as String?,
-        groupId: map['group_id'] as String?,
-        createdAt: DateTime.parse(map['created_at'] as String),
-        updatedAt: DateTime.parse(map['updated_at'] as String),
-        interactions: interactions,
-      ));
+      contacts.add(_contactFromMapWithMeta(map, methods, interactions));
     }
     return contacts;
   }

@@ -44,15 +44,48 @@ class TaskGeneratorService {
 
   static String _buildTaskGenerationPrompt(Contact contact, int days) {
     final goal = contact.goalRelation ?? '普通朋友';
-    return '''
-请为以下联系人生成$days天的社交任务计划：
+    // 构造详细人物画像供 AI 参考
+    final profile = StringBuffer();
+    profile.writeln('联系人姓名：${contact.name}');
+    profile.writeln('当前关系：${_getRelationshipDescription(contact.level)}');
+    profile.writeln('目标关系：$goal');
+    if (contact.gender != Gender.unknown) profile.writeln('性别：${contact.genderName}');
+    if (contact.age != null) profile.writeln('年龄：${contact.age}岁');
+    if (contact.maritalStatus != MaritalStatus.unknown) profile.writeln('婚姻状况：${contact.maritalStatusName}');
+    if (contact.educationLevel != EducationLevel.unknown) profile.writeln('学历：${contact.educationLevelName}');
+    if (contact.school != null) profile.writeln('学校：${contact.school}');
+    if (contact.industry != null) profile.writeln('行业：${contact.industry}');
+    if (contact.company != null) profile.writeln('公司：${contact.company}');
+    if (contact.position != null) profile.writeln('职位：${contact.position}');
+    if (contact.personalityTags != null) profile.writeln('性格标签：${contact.personalityTags}');
+    if (contact.personalityDesc != null) profile.writeln('性格描述：${contact.personalityDesc}');
+    if (contact.hobbies != null) profile.writeln('兴趣爱好：${contact.hobbies}');
+    if (contact.strengths != null) profile.writeln('优点：${contact.strengths}');
+    if (contact.weaknesses != null) profile.writeln('缺点：${contact.weaknesses}');
+    if (contact.fears != null) profile.writeln('恐惧：${contact.fears}');
+    if (contact.desires != null) profile.writeln('渴望：${contact.desires}');
+    if (contact.skills != null) profile.writeln('技能：${contact.skills}');
+    if (contact.tastePreferences != null) profile.writeln('口味偏好：${contact.tastePreferences}');
+    if (contact.familyEconomicStatus != null) profile.writeln('家庭经济状况：${contact.familyEconomicStatus}');
+    if (contact.currentStatus != null) profile.writeln('目前现状：${contact.currentStatus}');
+    profile.writeln('TA对我的信任度：${contact.taTrustLevel}/10');
+    profile.writeln('我对TA的信任度：${contact.myTrustLevel}/10');
+    if (contact.moneyDesireLevel != null) profile.writeln('挣钱欲望：${contact.moneyDesireLevel}/5');
+    if (contact.ambitionLevel != null) profile.writeln('上进心：${contact.ambitionLevel}/5');
+    if (contact.shortTermGoals != null) profile.writeln('短期目标：${contact.shortTermGoals}');
+    if (contact.longTermGoals != null) profile.writeln('长期目标：${contact.longTermGoals}');
+    if (contact.socialCircles != null) profile.writeln('所交往圈子：${contact.socialCircles}');
+    if (contact.taboos != null) profile.writeln('大忌（绝对不要踩）：${contact.taboos}');
+    if (contact.values != null) profile.writeln('价值观：${contact.values}');
 
-联系人姓名：${contact.name}
-当前关系：${_getRelationshipDescription(contact.level)}
-目标关系：$goal
+    return '''
+请为以下联系人生成$days天的社交任务计划，充分利用人物画像信息使任务贴合此人特点：
+
+【人物画像】
+${profile.toString()}
 
 请生成具体的、可执行的社交任务，包括：
-1. 具体的行动（如：发消息、打电话、约见面等）
+1. 具体的行动（如：发消息、打电话、约见面、送礼物等）
 2. 任务时间和频率
 3. 简要的任务描述
 
@@ -61,11 +94,11 @@ class TaskGeneratorService {
   "tasks": [
     {
       "title": "任务标题",
-      "description": "任务详细描述",
-      "type": "sendMessage|greeting|phoneCall|socialInteraction|other",
+      "description": "任务详细描述（包含如何切入话题的建议）",
+      "type": "sendMessage|greeting|phoneCall|socialInteraction|gift|other",
       "priority": 1-5,
-      "scheduled_days": [1, 2, 3], // 从今天开始第几天执行
-      "scheduled_hour": 9-21 // 建议执行时间（小时）
+      "scheduled_days": [1, 2, 3],
+      "scheduled_hour": 9-21
     }
   ]
 }
@@ -74,7 +107,9 @@ class TaskGeneratorService {
 - 任务要符合目标关系，不要过于亲密或疏远
 - 频率要适中，既要保持联系又不要过于频繁
 - 优先选择对方可能方便的时段
-- 考虑对方的社交习惯
+- 考虑对方的兴趣爱好和性格，选择合适的话题切入点
+- 注意大忌，绝对不要在任务中涉及那些雷区
+- 话题可以围绕对方的工作、兴趣、职业发展、家庭等展开
 ''';
   }
 
