@@ -325,43 +325,43 @@ class _ContactEditPageState extends State<ContactEditPage> {
             _field(TextFormField(controller: _industryController, decoration: const InputDecoration(labelText: '当前行业', hintText: '如：互联网、金融'))),
             _field(TextFormField(controller: _companyController, decoration: const InputDecoration(labelText: '公司', hintText: '就职公司'))),
             _field(TextFormField(controller: _positionController, decoration: const InputDecoration(labelText: '职位', hintText: '当前职位'))),
-            _field(TextFormField(controller: _workExpController, decoration: const InputDecoration(labelText: '过往经历', hintText: '以前做过的行业或职位', maxLines: 2))),
+            _field(TextFormField(controller: _workExpController, decoration: const InputDecoration(labelText: '过往经历', hintText: '以前做过的行业或职位'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块4：个性与价值观 =====
             _sectionHeader('个性与价值观'),
             _field(TextFormField(controller: _personalityTagsController, decoration: const InputDecoration(labelText: '性格标签', hintText: '如：外向、内敛，用顿号或逗号分隔'))),
-            _field(TextFormField(controller: _personalityDescController, decoration: const InputDecoration(labelText: '性格详细描述', hintText: '详细描述此人的性格特点', maxLines: 3))),
+            _field(TextFormField(controller: _personalityDescController, decoration: const InputDecoration(labelText: '性格详细描述', hintText: '详细描述此人的性格特点'), maxLines: 3)),
             _field(TextFormField(controller: _characterTagsController, decoration: const InputDecoration(labelText: '人品标签', hintText: '如：守信、仗义，用顿号分隔'))),
-            _field(TextFormField(controller: _taboosController, decoration: const InputDecoration(labelText: '大忌', hintText: '绝对不能触碰的雷区', maxLines: 2))),
-            _field(TextFormField(controller: _valuesController, decoration: const InputDecoration(labelText: '价值观', hintText: '此人看重什么', maxLines: 2))),
+            _field(TextFormField(controller: _taboosController, decoration: const InputDecoration(labelText: '大忌', hintText: '绝对不能触碰的雷区'), maxLines: 2)),
+            _field(TextFormField(controller: _valuesController, decoration: const InputDecoration(labelText: '价值观', hintText: '此人看重什么'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块5：个人特质 =====
             _sectionHeader('个人特质'),
-            _field(TextFormField(controller: _hobbiesController, decoration: const InputDecoration(labelText: '兴趣爱好', hintText: '兴趣爱好描述', maxLines: 2))),
-            _field(TextFormField(controller: _strengthsController, decoration: const InputDecoration(labelText: '优点', hintText: '长处和优势', maxLines: 2))),
-            _field(TextFormField(controller: _weaknessesController, decoration: const InputDecoration(labelText: '缺点', hintText: '不足和弱点', maxLines: 2))),
-            _field(TextFormField(controller: _fearsController, decoration: const InputDecoration(labelText: '恐惧', hintText: '最害怕什么', maxLines: 2))),
-            _field(TextFormField(controller: _desiresController, decoration: const InputDecoration(labelText: '渴望', hintText: '内心最渴望什么', maxLines: 2))),
-            _field(TextFormField(controller: _skillsController, decoration: const InputDecoration(labelText: '技能与能力', hintText: '擅长什么', maxLines: 2))),
-            _field(TextFormField(controller: _tasteController, decoration: const InputDecoration(labelText: '口味偏好', hintText: '喜欢什么口味、食物偏好', maxLines: 2))),
+            _field(TextFormField(controller: _hobbiesController, decoration: const InputDecoration(labelText: '兴趣爱好', hintText: '兴趣爱好描述'), maxLines: 2)),
+            _field(TextFormField(controller: _strengthsController, decoration: const InputDecoration(labelText: '优点', hintText: '长处和优势'), maxLines: 2)),
+            _field(TextFormField(controller: _weaknessesController, decoration: const InputDecoration(labelText: '缺点', hintText: '不足和弱点'), maxLines: 2)),
+            _field(TextFormField(controller: _fearsController, decoration: const InputDecoration(labelText: '恐惧', hintText: '最害怕什么'), maxLines: 2)),
+            _field(TextFormField(controller: _desiresController, decoration: const InputDecoration(labelText: '渴望', hintText: '内心最渴望什么'), maxLines: 2)),
+            _field(TextFormField(controller: _skillsController, decoration: const InputDecoration(labelText: '技能与能力', hintText: '擅长什么'), maxLines: 2)),
+            _field(TextFormField(controller: _tasteController, decoration: const InputDecoration(labelText: '口味偏好', hintText: '喜欢什么口味、食物偏好'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块6：家庭信息 =====
             _sectionHeader('家庭信息'),
-            _field(TextFormField(controller: _homeAddrController, decoration: const InputDecoration(labelText: '家庭住址', hintText: '大致位置', maxLines: 2))),
-            _field(TextFormField(controller: _familySitController, decoration: const InputDecoration(labelText: '家庭情况', hintText: '家庭成员构成', maxLines: 2))),
-            _field(TextFormField(controller: _familyEcoController, decoration: const InputDecoration(labelText: '家庭经济状况', hintText: '经济条件描述', maxLines: 2))),
-            _field(TextFormField(controller: _familyEmoController, decoration: const InputDecoration(labelText: '家庭感情状况', hintText: '家庭关系如何', maxLines: 2))),
+            _field(TextFormField(controller: _homeAddrController, decoration: const InputDecoration(labelText: '家庭住址', hintText: '大致位置'), maxLines: 2)),
+            _field(TextFormField(controller: _familySitController, decoration: const InputDecoration(labelText: '家庭情况', hintText: '家庭成员构成'), maxLines: 2)),
+            _field(TextFormField(controller: _familyEcoController, decoration: const InputDecoration(labelText: '家庭经济状况', hintText: '经济条件描述'), maxLines: 2)),
+            _field(TextFormField(controller: _familyEmoController, decoration: const InputDecoration(labelText: '家庭感情状况', hintText: '家庭关系如何'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块7：信任与关系 =====
             _sectionHeader('信任与关系'),
             _sliderField('TA对我的信任度', _taTrust, (v) => setState(() => _taTrust = v)),
             _sliderField('我对TA的信任度', _myTrust, (v) => setState(() => _myTrust = v)),
-            _field(TextFormField(controller: _socialCirclesController, decoration: const InputDecoration(labelText: '所交往圈子', hintText: 'TA的社交圈子，如：程序员、创业者', maxLines: 2))),
-            _field(TextFormField(controller: _currentStatusController, decoration: const InputDecoration(labelText: '目前现状', hintText: '目前生活/工作状态', maxLines: 2))),
+            _field(TextFormField(controller: _socialCirclesController, decoration: const InputDecoration(labelText: '所交往圈子', hintText: 'TA的社交圈子，如：程序员、创业者'), maxLines: 2)),
+            _field(TextFormField(controller: _currentStatusController, decoration: const InputDecoration(labelText: '目前现状', hintText: '目前生活/工作状态'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块8：目标与欲望 =====
@@ -372,9 +372,9 @@ class _ContactEditPageState extends State<ContactEditPage> {
             _sliderField('上进心 (1-5)', int.tryParse(_ambition) ?? 3, (v) {
               setState(() => _ambition = v.toString());
             }),
-            _field(TextFormField(controller: _shortGoalsController, decoration: const InputDecoration(labelText: '短期目标', hintText: '最近几个月想达成的目标', maxLines: 2))),
-            _field(TextFormField(controller: _longGoalsController, decoration: const InputDecoration(labelText: '长期目标', hintText: '未来几年的规划', maxLines: 2))),
-            _field(TextFormField(controller: _goalRelationController, decoration: const InputDecoration(labelText: '目标关系定位', hintText: '你想和此人建立怎样的关系', maxLines: 2))),
+            _field(TextFormField(controller: _shortGoalsController, decoration: const InputDecoration(labelText: '短期目标', hintText: '最近几个月想达成的目标'), maxLines: 2)),
+            _field(TextFormField(controller: _longGoalsController, decoration: const InputDecoration(labelText: '长期目标', hintText: '未来几年的规划'), maxLines: 2)),
+            _field(TextFormField(controller: _goalRelationController, decoration: const InputDecoration(labelText: '目标关系定位', hintText: '你想和此人建立怎样的关系'), maxLines: 2)),
 
             const SizedBox(height: 12),
             // ===== 区块9：系统字段 =====
@@ -390,7 +390,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
               ))),
             TextButton.icon(icon: const Icon(Icons.add), label: const Text('添加社交账号'), onPressed: _addMethod),
             const SizedBox(height: 8),
-            _field(TextFormField(controller: _tagsController, decoration: const InputDecoration(labelText: '自定义标签', hintText: '多个标签用顿号或逗号分隔', maxLines: 2))),
+            _field(TextFormField(controller: _tagsController, decoration: const InputDecoration(labelText: '自定义标签', hintText: '多个标签用顿号或逗号分隔'), maxLines: 2)),
 
             const SizedBox(height: 40),
           ],
