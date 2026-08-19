@@ -818,7 +818,7 @@ class _RelationshipFeedSection extends StatelessWidget {
                               .firstOrNull;
                           if (contact != null) {
                             contactProvider.selectContact(contact);
-                            Navigator.pushNamed(context, '/contact-detail');
+                            Navigator.pushNamed(context, '/contact');
                           }
                         },
                         child: const Text('查看详情'),
@@ -871,7 +871,7 @@ class _RelationshipFeedSection extends StatelessWidget {
                               .firstOrNull;
                           if (contact != null) {
                             contactProvider.selectContact(contact);
-                            Navigator.pushNamed(context, '/contact-detail');
+                            Navigator.pushNamed(context, '/contact');
                           }
                         },
                       ),
