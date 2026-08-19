@@ -14,7 +14,7 @@ import '../models/channel.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'relation_app_mini.db';
-  static const int _dbVersion = 4;
+  static const int _dbVersion = 5;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -281,6 +281,7 @@ class DatabaseService {
         ai_caption TEXT,
         status INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
+        captions_by_group TEXT,
         FOREIGN KEY (group_id) REFERENCES contact_groups(id) ON DELETE CASCADE
       )
     ''');
@@ -455,6 +456,14 @@ class DatabaseService {
       final hasGroupId = personaCols.any((c) => c['name'] == 'group_id');
       if (!hasGroupId) {
         await db.execute('ALTER TABLE personas ADD COLUMN group_id TEXT');
+      }
+    }
+    if (oldVersion < 5) {
+      // temp_materials 表补充 captions_by_group 列（JSON 编码的 Map<String, String>，按分组配文案）
+      final tempMaterialCols = await db.rawQuery('PRAGMA table_info(temp_materials)');
+      final hasCaptionsByGroup = tempMaterialCols.any((c) => c['name'] == 'captions_by_group');
+      if (!hasCaptionsByGroup) {
+        await db.execute('ALTER TABLE temp_materials ADD COLUMN captions_by_group TEXT');
       }
     }
   }
