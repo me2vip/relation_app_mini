@@ -8,15 +8,8 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <!--
-      安装未知来源 APK：
-      - 此处不声明 REQUEST_INSTALL_PACKAGES 权限（参考社交教练 manifest 的做法）
-      - 不声明该权限时，open_filex 会通过 Intent.ACTION_VIEW + MIME 类型
-        application/vnd.android.package-archive 触发系统安装器（传统路径）
-      - 安装授权完全在系统安装器界面完成，用户体验与"浏览器下载 APK 后点击安装"一致
-      - 一旦声明 REQUEST_INSTALL_PACKAGES，系统会触发 PackageInstaller API 校验
-      - 社交教练 manifest 中写成 REEQUEST_INSTALL_PACKAGE（故意拼错），效果等同
-    -->
+    <!-- Android 8+ 安装未知来源 APK 必须声明此权限 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
     <application
         android:label="社交塔子"

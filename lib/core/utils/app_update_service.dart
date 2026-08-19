@@ -5,7 +5,7 @@
 /// 工作流程:
 ///   1. [checkForUpdate]:调用 GitHub `releases` 列表接口,比对版本号
 ///   2. [downloadApk]:流式下载 APK 到外部存储,支持进度回调
-///   3. [installApk]:调用 [OpenFilex] 拉起系统安装器(Android 8+ 自动处理未知来源权限)
+///   3. [installApk]:先请求 REQUEST_INSTALL_PACKAGES 权限，再调用 [OpenFilex] 拉起系统安装器
 ///
 /// GitHub API 文档:https://docs.github.com/en/rest/releases/releases#list-releases
 library app_update_service;
@@ -379,24 +379,23 @@ class AppUpdateService {
   ///
   /// 调用系统安装器安装 APK
   ///
-  /// 直接调用 [OpenFilex.open]，由其内部通过 Intent.ACTION_VIEW + MIME 类型
-  /// application/vnd.android.package-archive 触发系统安装器（传统安装路径）。
-  ///
-  /// **不需要** REQUEST_INSTALL_PACKAGES 权限。
-  /// 这是因为：
-  /// 1. Intent.ACTION_VIEW + APK MIME 类型由系统安装器处理
-  /// 2. 安装授权由用户在系统安装器界面完成
-  /// 3. 这和"浏览器下载 APK 后点击安装"是同一机制
-  ///
-  /// 注意：AndroidManifest 中**不要声明** REQUEST_INSTALL_PACKAGES 权限。
-  /// 一旦声明，系统会走 PackageInstaller API 校验，需要用户额外授权。
-  /// 社交教练的做法：在 manifest 里写 REEQUEST_INSTALL_PACKAGE（故意拼错），
-  /// 使权限声明无效，open_filex 走传统 Intent 路径，无需特殊权限。
+  /// 工作流程：
+  /// 1. 检查 REQUEST_INSTALL_PACKAGES 权限（Android 8+ 必须）
+  /// 2. 若未授权，request() 会触发系统"安装未知应用"授权对话框
+  /// 3. 权限就绪后，OpenFilex.open() 触发系统安装器完成安装
   static Future<OpenResult> installApk(File apkFile) async {
     if (!Platform.isAndroid) {
       return OpenResult(
         type: ResultType.error,
         message: '仅支持 Android 平台',
+      );
+    }
+    // 先请求安装权限（Android 8+ 必须有此权限才能触发系统安装器）
+    final perm = await Permission.requestInstallPackages.request();
+    if (!perm.isGranted) {
+      return OpenResult(
+        type: ResultType.permissionDenied,
+        message: '需要「安装未知应用」权限，请在弹出的设置中开启后重试',
       );
     }
     try {
@@ -409,13 +408,14 @@ class AppUpdateService {
     }
   }
 
-  /// 保留方法签名（兼容旧代码路径）
+  /// 打开系统设置页面，引导用户手动开启「安装未知应用」权限
   ///
-  /// 社交教练的实践中，此方法不会被调用到，因为不需要特殊权限。
-  /// 保留是为了在 REQUEST_INSTALL_PACKAGES 意外生效时仍能引导用户。
+  /// Android 11+ 的 REQUEST_INSTALL_PACKAGES 权限只有系统应用能动态获取，
+  /// 第三方应用只能通过"设置 → 应用信息 → 安装未知应用"手动授权。
+  /// 此方法直接打开应用的系统设置页，用户操作后返回重试安装。
   static Future<bool> openInstallPermissionSettings() async {
-    final status = await Permission.requestInstallPackages.request();
-    return status.isGranted;
+    final opened = await openAppSettings();
+    return opened;
   }
 
   /// 版本比较:a > b(按 x.y.z 三段式比较)
