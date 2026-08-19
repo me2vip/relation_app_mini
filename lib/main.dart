@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/app_provider.dart';
 import 'core/providers/contact_provider.dart';
 import 'core/providers/task_provider.dart';
@@ -33,11 +34,40 @@ void main() async {
   await NotificationService.initialize();
   await NotificationService.requestPermissions();
 
-  runApp(const MyApp());
+  // 获取主题设置
+  final prefs = await SharedPreferences.getInstance();
+  final isDarkMode = prefs.getBool('dark_mode') ?? false;
+
+  runApp(MyApp(isDarkMode: isDarkMode));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MyApp extends StatefulWidget {
+  final bool isDarkMode;
+
+  const MyApp({super.key, this.isDarkMode = false});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late bool _isDarkMode;
+
+  @override
+  void initState() {
+    super.initState();
+    _isDarkMode = widget.isDarkMode;
+  }
+
+  void _toggleTheme(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('dark_mode', value);
+    setState(() => _isDarkMode = value);
+  }
+
+  static _MyAppState? of(BuildContext context) {
+    return context.findAncestorStateOfType<_MyAppState>();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,6 +106,30 @@ class MyApp extends StatelessWidget {
             unselectedItemColor: Colors.grey,
           ),
         ),
+        darkTheme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: const Color(0xFF6366F1),
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
+          cardTheme: const CardThemeData(
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.all(Radius.circular(16)),
+            ),
+          ),
+          appBarTheme: const AppBarTheme(
+            centerTitle: true,
+            elevation: 0,
+            backgroundColor: Colors.transparent,
+          ),
+          bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: Color(0xFF6366F1),
+            unselectedItemColor: Colors.grey,
+          ),
+        ),
+        themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
         home: const SplashPage(),
         routes: {
           '/home': (context) => const HomePage(),

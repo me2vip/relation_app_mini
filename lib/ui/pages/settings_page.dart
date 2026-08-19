@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/providers/app_provider.dart';
 import '../../core/widgets/update_dialog.dart';
+import '../../main.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -117,7 +118,8 @@ class _SettingsPageState extends State<SettingsPage> {
                   onChanged: (value) {
                     setState(() => _darkMode = value);
                     _saveSetting('dark_mode', value);
-                    // TODO: 实际切换主题
+                    // 切换主题
+                    MyApp.of(context)?._toggleTheme(value);
                   },
                 ),
               ),

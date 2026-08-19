@@ -1,7 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../services/storage_service.dart';
+import '../../core/providers/app_provider.dart';
 
 class PrivacySettingsPage extends StatefulWidget {
   const PrivacySettingsPage({super.key});
@@ -254,34 +261,157 @@ class _PrivacySettingsPageState extends State<PrivacySettingsPage> {
               leading: const Icon(Icons.file_download),
               title: const Text('导出到文件'),
               subtitle: const Text('保存为加密的备份文件'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                // TODO: 实现导出功能
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('导出功能开发中...'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                await _exportToFile();
               },
             ),
             ListTile(
               leading: const Icon(Icons.share),
               title: const Text('分享备份'),
               subtitle: const Text('通过其他应用分享备份文件'),
-              onTap: () {
+              onTap: () async {
                 Navigator.pop(context);
-                // TODO: 实现分享功能
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('分享功能开发中...'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+                await _shareBackup();
               },
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Future<void> _exportToFile() async {
+    try {
+      // 显示加载指示器
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // 收集所有数据
+      final backupData = await _collectBackupData();
+      
+      // 生成备份文件名
+      final now = DateTime.now();
+      final fileName = 'relation_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}_${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}.json';
+      
+      // 让用户选择保存位置
+      String? outputPath = await FilePicker.platform.getDirectoryPath();
+      
+      if (outputPath == null) {
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      
+      final file = File('$outputPath/$fileName');
+      await file.writeAsString(jsonEncode(backupData));
+      
+      if (mounted) {
+        Navigator.pop(context); // 关闭加载指示器
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('备份已保存到: $fileName'),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: '打开',
+              onPressed: () => _openFileLocation(file.path),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('导出失败: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _shareBackup() async {
+    try {
+      // 显示加载指示器
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      // 收集所有数据
+      final backupData = await _collectBackupData();
+      
+      // 保存到临时文件
+      final tempDir = await getTemporaryDirectory();
+      final now = DateTime.now();
+      final fileName = 'relation_backup_${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.json';
+      final file = File('${tempDir.path}/$fileName');
+      await file.writeAsString(jsonEncode(backupData));
+      
+      if (mounted) {
+        Navigator.pop(context); // 关闭加载指示器
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          subject: '社交塔子数据备份',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('分享失败: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<Map<String, dynamic>> _collectBackupData() async {
+    final contacts = await DatabaseService.getAllContacts();
+    final groups = await DatabaseService.getAllContactGroups();
+    final personas = await DatabaseService.getAllPersonas();
+    final tasks = await DatabaseService.getAllTasks();
+    final posts = await DatabaseService.getAllDynamicPosts();
+    final materials = await DatabaseService.getAllTempMaterials();
+    final channels = await DatabaseService.getAllChannels();
+    final aiModels = await DatabaseService.getAllAIModels();
+    
+    final prefs = await SharedPreferences.getInstance();
+    final settings = <String, dynamic>{};
+    for (final key in prefs.getKeys()) {
+      if (!key.startsWith('_internal_')) {
+        settings[key] = prefs.get(key);
+      }
+    }
+    
+    return {
+      'version': '1.5.3',
+      'backupTime': DateTime.now().toIso8601String(),
+      'contacts': contacts.map((c) => c.toJson()).toList(),
+      'groups': groups.map((g) => g.toJson()).toList(),
+      'personas': personas.map((p) => p.toJson()).toList(),
+      'tasks': tasks.map((t) => t.toJson()).toList(),
+      'posts': posts.map((p) => p.toJson()).toList(),
+      'materials': materials.map((m) => m.toJson()).toList(),
+      'channels': channels.map((c) => c.toJson()).toList(),
+      'aiModels': aiModels.map((m) => m.toJson()).toList(),
+      'settings': settings,
+    };
+  }
+
+  void _openFileLocation(String path) {
+    // 简单提示路径
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('文件保存在: $path'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -298,21 +428,167 @@ class _PrivacySettingsPageState extends State<PrivacySettingsPage> {
             child: const Text('取消'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              // TODO: 实现文件选择和恢复
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('恢复功能开发中...'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              await _restoreFromFile();
             },
             child: const Text('选择文件'),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _restoreFromFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+      );
+      
+      if (result == null || result.files.isEmpty) return;
+      
+      final filePath = result.files.first.path;
+      if (filePath == null) return;
+      
+      // 显示加载指示器
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+      
+      final file = File(filePath);
+      final content = await file.readAsString();
+      final backupData = jsonDecode(content) as Map<String, dynamic>;
+      
+      // 验证备份文件格式
+      if (backupData['version'] == null || backupData['contacts'] == null) {
+        throw Exception('无效的备份文件格式');
+      }
+      
+      // 恢复数据
+      await _restoreBackupData(backupData);
+      
+      if (mounted) {
+        Navigator.pop(context); // 关闭加载指示器
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('数据恢复成功！请重启应用以生效。'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('恢复失败: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _restoreBackupData(Map<String, dynamic> backupData) async {
+    final db = await DatabaseService.database;
+    
+    // 清空现有数据
+    await db.delete('contacts');
+    await db.delete('contact_methods');
+    await db.delete('interactions');
+    await db.delete('tasks');
+    await db.delete('contact_groups');
+    await db.delete('personas');
+    await db.delete('dynamic_posts');
+    await db.delete('temp_materials');
+    await db.delete('channels');
+    await db.delete('ai_models');
+    await db.delete('relationship_changes');
+    
+    // 恢复联系人
+    for (final contactJson in backupData['contacts'] as List) {
+      final contact = Contact.fromJson(contactJson as Map<String, dynamic>);
+      await DatabaseService.saveContact(contact);
+    }
+    
+    // 恢复分组
+    if (backupData['groups'] != null) {
+      for (final groupJson in backupData['groups'] as List) {
+        final group = ContactGroup.fromJson(groupJson as Map<String, dynamic>);
+        await DatabaseService.saveContactGroup(group);
+      }
+    }
+    
+    // 恢复人设
+    if (backupData['personas'] != null) {
+      for (final personaJson in backupData['personas'] as List) {
+        final persona = Persona.fromJson(personaJson as Map<String, dynamic>);
+        await DatabaseService.savePersona(persona);
+      }
+    }
+    
+    // 恢复任务
+    if (backupData['tasks'] != null) {
+      for (final taskJson in backupData['tasks'] as List) {
+        final task = SocialTask.fromJson(taskJson as Map<String, dynamic>);
+        await DatabaseService.saveTask(task);
+      }
+    }
+    
+    // 恢复动态
+    if (backupData['posts'] != null) {
+      for (final postJson in backupData['posts'] as List) {
+        final post = DynamicPost.fromJson(postJson as Map<String, dynamic>);
+        await DatabaseService.saveDynamicPost(post);
+      }
+    }
+    
+    // 恢复临时素材
+    if (backupData['materials'] != null) {
+      for (final materialJson in backupData['materials'] as List) {
+        final material = TempMaterial.fromJson(materialJson as Map<String, dynamic>);
+        await DatabaseService.saveTempMaterial(material);
+      }
+    }
+    
+    // 恢复渠道
+    if (backupData['channels'] != null) {
+      for (final channelJson in backupData['channels'] as List) {
+        final channel = SocialChannel.fromJson(channelJson as Map<String, dynamic>);
+        await DatabaseService.saveChannel(channel);
+      }
+    }
+    
+    // 恢复AI模型
+    if (backupData['aiModels'] != null) {
+      for (final modelJson in backupData['aiModels'] as List) {
+        final model = AIModel.fromJson(modelJson as Map<String, dynamic>);
+        await DatabaseService.saveAIModel(model);
+      }
+    }
+    
+    // 恢复设置
+    if (backupData['settings'] != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.clear();
+      final settings = backupData['settings'] as Map<String, dynamic>;
+      for (final entry in settings.entries) {
+        if (entry.value is bool) {
+          await prefs.setBool(entry.key, entry.value as bool);
+        } else if (entry.value is int) {
+          await prefs.setInt(entry.key, entry.value as int);
+        } else if (entry.value is double) {
+          await prefs.setDouble(entry.key, entry.value as double);
+        } else if (entry.value is String) {
+          await prefs.setString(entry.key, entry.value as String);
+        } else if (entry.value is List) {
+          await prefs.setStringList(entry.key, (entry.value as List).cast<String>());
+        }
+      }
+    }
   }
 
   void _showLockTimeoutOptions() {
@@ -374,14 +650,28 @@ class _PrivacySettingsPageState extends State<PrivacySettingsPage> {
             onPressed: () async {
               Navigator.pop(context);
               
-              // TODO: 实现数据清除
+              // 清除数据库
+              final db = await DatabaseService.database;
+              await db.delete('contacts');
+              await db.delete('contact_methods');
+              await db.delete('interactions');
+              await db.delete('tasks');
+              await db.delete('contact_groups');
+              await db.delete('personas');
+              await db.delete('dynamic_posts');
+              await db.delete('temp_materials');
+              await db.delete('channels');
+              await db.delete('ai_models');
+              await db.delete('relationship_changes');
+              
+              // 清除设置
               final prefs = await SharedPreferences.getInstance();
               await prefs.clear();
               
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('数据已清除'),
+                    content: Text('所有数据已清除，请重启应用'),
                     behavior: SnackBarBehavior.floating,
                   ),
                 );

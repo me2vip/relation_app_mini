@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/task_provider.dart';
+import '../../core/providers/ai_provider.dart';
 import '../../models/contact.dart';
 import '../../models/task.dart';
+import '../../models/ai_config.dart';
 import 'package:intl/intl.dart';
 import 'contact_edit_page.dart';
 
@@ -477,9 +479,7 @@ class _TaskTab extends StatelessWidget {
                 const Text('还没有任务'),
                 const SizedBox(height: 20),
                 ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: 生成AI任务
-                  },
+                  onPressed: () => _generateAITasks(context, contact),
                   icon: const Icon(Icons.auto_awesome),
                   label: const Text('AI生成任务'),
                 ),
@@ -548,6 +548,61 @@ class _TaskTab extends StatelessWidget {
         return Icons.phone;
       case TaskType.other:
         return Icons.task;
+    }
+  }
+}
+
+Future<void> _generateAITasks(BuildContext context, Contact contact) async {
+  final aiProvider = context.read<AIProvider>();
+  final taskProvider = context.read<TaskProvider>();
+  
+  // 检查是否有可用的 AI 模型
+  final models = aiProvider.models;
+  if (models.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('请先在设置中配置 AI 模型'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    return;
+  }
+  
+  // 选择第一个可用的模型
+  final model = models.first;
+  
+  // 显示加载指示器
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+  
+  try {
+    await taskProvider.generateTasksForContact(
+      contact: contact,
+      model: model,
+      days: 7,
+    );
+    
+    if (context.mounted) {
+      Navigator.pop(context); // 关闭加载指示器
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('AI 任务已生成！'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('生成失败: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }
