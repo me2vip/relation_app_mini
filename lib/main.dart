@@ -27,6 +27,9 @@ import 'ui/pages/dynamic_post_page.dart';
 import 'ui/pages/channel_manage_page.dart';
 import 'services/notification_service.dart';
 
+// GlobalKey 用于访问 MyApp 状态
+final GlobalKey<_MyAppState> myAppKey = GlobalKey<_MyAppState>();
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -38,7 +41,11 @@ void main() async {
   final prefs = await SharedPreferences.getInstance();
   final isDarkMode = prefs.getBool('dark_mode') ?? false;
 
-  runApp(MyApp(isDarkMode: isDarkMode));
+  runApp(MyApp(key: myAppKey, isDarkMode: isDarkMode));
+}
+
+void toggleAppTheme(bool value) {
+  myAppKey.currentState?._toggleTheme(value);
 }
 
 class MyApp extends StatefulWidget {
@@ -63,10 +70,6 @@ class _MyAppState extends State<MyApp> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('dark_mode', value);
     setState(() => _isDarkMode = value);
-  }
-
-  static _MyAppState? of(BuildContext context) {
-    return context.findAncestorStateOfType<_MyAppState>();
   }
 
   @override

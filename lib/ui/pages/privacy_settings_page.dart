@@ -9,6 +9,14 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/storage_service.dart';
 import '../../core/providers/app_provider.dart';
+import '../../models/contact.dart';
+import '../../models/contact_group.dart';
+import '../../models/persona.dart';
+import '../../models/task.dart';
+import '../../models/dynamic_post.dart';
+import '../../models/temp_material.dart';
+import '../../models/channel.dart';
+import '../../models/ai_config.dart';
 
 class PrivacySettingsPage extends StatefulWidget {
   const PrivacySettingsPage({super.key});

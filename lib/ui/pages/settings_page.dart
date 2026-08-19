@@ -119,7 +119,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     setState(() => _darkMode = value);
                     _saveSetting('dark_mode', value);
                     // 切换主题
-                    MyApp.of(context)?._toggleTheme(value);
+                    toggleAppTheme(value);
                   },
                 ),
               ),
