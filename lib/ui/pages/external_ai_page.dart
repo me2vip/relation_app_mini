@@ -22,6 +22,31 @@ class _ExternalAIPageState extends State<ExternalAIPage> {
   List<String> _selectedAttachments = [];
 
   @override
+  void initState() {
+    super.initState();
+    // 延迟处理路由参数（在 build 之后）
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleRouteArguments();
+    });
+  }
+
+  void _handleRouteArguments() {
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null) {
+      if (args['title'] != null) {
+        _titleController.text = args['title'] as String;
+      }
+      if (args['prompt'] != null) {
+        _promptController.text = args['prompt'] as String;
+      }
+      if (args['contactId'] != null) {
+        _selectedContactId = args['contactId'] as String;
+        _updateContextFromContact(_selectedContactId);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _titleController.dispose();
     _promptController.dispose();
@@ -223,12 +248,18 @@ class _ExternalAIPageState extends State<ExternalAIPage> {
       ),
     );
 
+    // 如果联系人为空，不更新
+    if (contact.id.isEmpty) return;
+
     // 自动填充联系人信息到背景
     final buffer = StringBuffer();
     buffer.writeln('联系人: ${contact.name}');
     buffer.writeln('关系: ${contact.levelName}');
     if (contact.goalRelation != null) {
       buffer.writeln('目标关系: ${contact.goalRelation}');
+    }
+    if (contact.tags.isNotEmpty) {
+      buffer.writeln('标签: ${contact.tags.join('、')}');
     }
     
     _contextController.text = buffer.toString();

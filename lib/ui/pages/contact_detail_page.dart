@@ -554,22 +554,78 @@ class _TaskTab extends StatelessWidget {
 
 Future<void> _generateAITasks(BuildContext context, Contact contact) async {
   final aiProvider = context.read<AIProvider>();
-  final taskProvider = context.read<TaskProvider>();
-  
-  // 检查是否有可用的 AI 模型
   final models = aiProvider.models;
-  if (models.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('请先在设置中配置 AI 模型'),
-        behavior: SnackBarBehavior.floating,
+  
+  // 弹出选择对话框：内部AI vs 外部AI
+  final result = await showDialog<String>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('选择 AI 调用方式'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ListTile(
+            leading: const Icon(Icons.smart_toy, color: Color(0xFF6366F1)),
+            title: const Text('内部 AI'),
+            subtitle: Text(
+              models.isEmpty 
+                  ? '未配置模型，请先在设置中添加' 
+                  : '使用已配置的模型直接生成',
+              style: TextStyle(
+                color: models.isEmpty ? Colors.red : null,
+              ),
+            ),
+            enabled: models.isNotEmpty,
+            onTap: () => Navigator.pop(context, 'internal'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.description_outlined, color: Colors.orange),
+            title: const Text('外部 AI'),
+            subtitle: const Text('导出提示词和素材为 PDF'),
+            onTap: () => Navigator.pop(context, 'external'),
+          ),
+        ],
+      ),
+    ),
+  );
+  
+  if (result == null) return;
+  
+  if (result == 'internal') {
+    await _generateWithInternalAI(context, contact, models);
+  } else if (result == 'external') {
+    await _generateWithExternalAI(context, contact);
+  }
+}
+
+Future<void> _generateWithInternalAI(
+  BuildContext context, 
+  Contact contact,
+  List<AIModel> models,
+) async {
+  // 让用户选择具体模型
+  AIModel? selectedModel = models.first;
+  
+  if (models.length > 1) {
+    selectedModel = await showDialog<AIModel>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('选择模型'),
+        children: models.map((m) {
+          return SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, m),
+            child: ListTile(
+              leading: Icon(_getModelIcon(m.provider)),
+              title: Text(m.name),
+              subtitle: Text(m.providerName),
+            ),
+          );
+        }).toList(),
       ),
     );
-    return;
+    
+    if (selectedModel == null) return;
   }
-  
-  // 选择第一个可用的模型
-  final model = models.first;
   
   // 显示加载指示器
   showDialog(
@@ -579,14 +635,15 @@ Future<void> _generateAITasks(BuildContext context, Contact contact) async {
   );
   
   try {
+    final taskProvider = context.read<TaskProvider>();
     await taskProvider.generateTasksForContact(
       contact: contact,
-      model: model,
+      model: selectedModel,
       days: 7,
     );
     
     if (context.mounted) {
-      Navigator.pop(context); // 关闭加载指示器
+      Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('AI 任务已生成！'),
@@ -604,6 +661,46 @@ Future<void> _generateAITasks(BuildContext context, Contact contact) async {
         ),
       );
     }
+  }
+}
+
+Future<void> _generateWithExternalAI(BuildContext context, Contact contact) async {
+  // 导航到外部AI页面，预填充联系人和任务生成提示词
+  Navigator.pushNamed(
+    context, 
+    '/external-ai',
+    arguments: {
+      'contactId': contact.id,
+      'title': '为 ${contact.name} 生成社交任务',
+      'prompt': '''请为联系人「${contact.name}」生成未来7天的社交任务建议。
+
+联系人信息：
+- 姓名：${contact.name}
+- 关系层级：${contact.levelName}
+${contact.goalRelation != null ? '- 目标关系：${contact.goalRelation}' : ''}
+${contact.tags.isNotEmpty ? '- 标签：${contact.tags.join('、')}' : ''}
+
+请根据以上信息，生成具体可执行的社交任务，包括：
+1. 任务类型（如：发消息、打电话、社交互动等）
+2. 任务标题
+3. 具体描述
+4. 建议执行时间''',
+    },
+  );
+}
+
+IconData _getModelIcon(AIModelProvider provider) {
+  switch (provider) {
+    case AIModelProvider.openai:
+      return Icons.smart_toy;
+    case AIModelProvider.claude:
+      return Icons.psychology;
+    case AIModelProvider.alibaba:
+      return Icons.auto_awesome;
+    case AIModelProvider.local:
+      return Icons.computer;
+    case AIModelProvider.external:
+      return Icons.description_outlined;
   }
 }
 
