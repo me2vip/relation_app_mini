@@ -389,14 +389,18 @@ class PersonaProvider extends ChangeNotifier {
     }
   }
 
-  /// 为素材的每个分组分别配文案（按各分组人设）
   /// 返回 groupId -> caption 的映射
+  /// 如果没有配置内置AI模型，返回空Map并设置errorMessage。
+  /// 注意：外部AI流程不通过本方法，用户应走 AI任务中心（导出PDF粘贴结果）。
   Future<Map<String, String>> generateCaptionsForMaterial(
       String materialId) async {
-    final material = _tempMaterials.firstWhere((m) => m.id == materialId);
+    final material = _tempMaterials.firstWhere(
+      (m) => m.id == materialId,
+      orElse: () => throw StateError('未找到素材记录，请返回重试'),
+    );
     final model = await DatabaseService.getDefaultAIModel();
     if (model == null || model.isExternal) {
-      _errorMessage = '请先在 AI 设置中配置可用的 AI 模型';
+      _errorMessage = '未配置内置AI模型：可前往【我的→AI设置】添加API；或使用【AI任务中心】导出PDF，用外部AI（千问/豆包等）生成后粘贴回APP，无需配置密钥';
       notifyListeners();
       return {};
     }

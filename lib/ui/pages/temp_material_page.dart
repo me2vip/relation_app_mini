@@ -452,15 +452,25 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
           controller.text = entry.value;
         }
         setState(() => _hasGenerated = true);
-      } else if (provider.errorMessage != null && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage!)),
-        );
+      } else if (mounted) {
+        final msg = provider.errorMessage;
+        if (msg != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              duration: const Duration(seconds: 5),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('生成失败: $e')),
+          SnackBar(
+            content: Text('生成失败: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -469,7 +479,8 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
   }
 
   Future<void> _createTasks(PersonaProvider provider) async {
-    if (_currentMaterialId == null) {
+    final currentId = _currentMaterialId;
+    if (currentId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('请先生成文案')),
       );
@@ -477,8 +488,10 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
     }
 
     // 将用户编辑后的文案写回素材
-    final material = provider.tempMaterials
-        .firstWhere((m) => m.id == _currentMaterialId!);
+    final material = provider.tempMaterials.firstWhere(
+      (m) => m.id == currentId,
+      orElse: () => throw StateError('素材已被清理，请重新添加'),
+    );
     final captions = <String, String>{};
     for (final entry in _captionControllers.entries) {
       if (entry.value.text.trim().isNotEmpty) {
@@ -510,10 +523,17 @@ class _TempMaterialPageState extends State<TempMaterialPage> {
           _hasGenerated = false;
           _currentMaterialId = null;
         });
-      } else if (provider.errorMessage != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage!)),
-        );
+      } else if (provider.errorMessage != null && mounted) {
+        final err = provider.errorMessage;
+        if (err != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(err),
+              duration: const Duration(seconds: 5),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     }
   }

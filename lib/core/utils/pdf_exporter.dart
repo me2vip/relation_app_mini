@@ -28,16 +28,17 @@ class PdfExporter {
     for (final path in fontPaths) {
       try {
         final file = File(path);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          if (bytes.isEmpty) continue;
-          try {
-            final font = pw.Font.ttf(bytes.buffer.asByteData());
-            _cachedChineseFont = font;
-            return font;
-          } catch (_) {
-            // 字体格式不支持，继续尝试下一个
-          }
+        if (!await file.exists()) continue;
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        try {
+          final byteData = bytes.buffer.asByteData();
+          if (byteData.lengthInBytes < 12) continue;
+          final font = pw.Font.ttf(byteData);
+          _cachedChineseFont = font;
+          return font;
+        } catch (_) {
+          // 字体格式不支持，继续尝试下一个
         }
       } catch (_) {}
     }
@@ -45,39 +46,47 @@ class PdfExporter {
     return null;
   }
 
-  static pw.TextStyle _safeStyle({
-    pw.Font? font,
-    double? fontSize,
-    pw.FontWeight? fontWeight,
-    PdfColor? color,
-    double? height,
-    pw.FontStyle? fontStyle,
-    pw.TextDecoration? decoration,
-  }) {
-    // 当没有中文字体时，不要设置 italic/bold 等扩展样式，
-    // 避免 pdf 内部 Helvetica 字体组合时触发空断言
-    final useFontStyle = font != null ? fontStyle : null;
-    final useFontWeight = font != null ? fontWeight : null;
-
+  /// 极简安全 TextStyle：只有明确有字体时才传 font，
+  /// 不设置任何可能触发 pdf 库内部组合断言的扩展样式。
+  static pw.TextStyle _plainStyle(pw.Font? font, double size, {PdfColor? color, double? height}) {
     if (font != null) {
-      return pw.TextStyle(
-        font: font,
-        fontSize: fontSize,
-        fontWeight: useFontWeight,
-        color: color,
-        height: height,
-        fontStyle: useFontStyle,
-        decoration: decoration,
-      );
+      return pw.TextStyle(font: font, fontSize: size, color: color, height: height);
     }
-    return pw.TextStyle(
-      fontSize: fontSize,
-      fontWeight: useFontWeight,
-      color: color,
-      height: height,
-      fontStyle: useFontStyle,
-      decoration: decoration,
+    return pw.TextStyle(fontSize: size, color: color, height: height);
+  }
+
+  /// 将可能包含 emoji 或控制字符的文本进行安全处理，
+  /// 避免 pdf 库遇到不支持的 Unicode 时内部崩溃。
+  static String _sanitizeText(String? text) {
+    if (text == null) return '';
+    var s = text;
+    // 移除一些 PDF 字体可能不支持的 emoji 区间
+    s = s.replaceAllMapped(
+      RegExp(
+        r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}]',
+        unicode: true,
+      ),
+      (m) => '□',
     );
+    // 去掉 ASCII 控制字符 (0x00-0x1F 除了 \n\r\t)
+    s = s.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');
+    return s;
+  }
+
+  static pw.Widget _safeText(String? raw, pw.Font? font, double size,
+      {PdfColor? color, double? height, pw.TextAlign? align}) {
+    final text = _sanitizeText(raw);
+    final style = _plainStyle(font, size, color: color, height: height);
+    try {
+      return pw.Text(text, style: style, textAlign: align ?? pw.TextAlign.left);
+    } catch (_) {
+      // 如果连 pw.Text 都抛错（极端情况），退回使用系统默认字体
+      try {
+        return pw.Text(text, style: pw.TextStyle(fontSize: size), textAlign: align ?? pw.TextAlign.left);
+      } catch (__) {
+        return pw.SizedBox.shrink();
+      }
+    }
   }
 
   static Future<File> exportExternalAIPdf({
@@ -94,109 +103,86 @@ class PdfExporter {
       chineseFont = null;
     }
 
-    final style = _safeStyle(font: chineseFont, fontSize: 11, height: 1.5);
-    final h1Style = _safeStyle(
-      font: chineseFont,
-      fontSize: 22,
-      fontWeight: pw.FontWeight.bold,
-      height: 1.3,
-    );
-    final h2Style = _safeStyle(
-      font: chineseFont,
-      fontSize: 16,
-      fontWeight: pw.FontWeight.bold,
-      height: 1.3,
-    );
-    final captionStyle = _safeStyle(
-      font: chineseFont,
-      fontSize: 10,
-      color: PdfColors.grey500,
-    );
-    final quoteStyle = _safeStyle(
-      font: chineseFont,
-      fontSize: 11,
-      fontStyle: chineseFont != null ? pw.FontStyle.italic : null,
-      color: PdfColors.grey700,
-    );
-
-    final pdf = pw.Document();
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
-    final dateForHeader = DateFormat('yyyy年MM月dd日').format(now);
 
-    final widgets = <pw.Widget>[];
+    final children = <pw.Widget>[];
 
-    widgets.add(pw.Text(title, style: h1Style));
-    widgets.add(pw.SizedBox(height: 8));
-    widgets.add(pw.Text('生成时间：$dateStr', style: captionStyle));
-    if (contactName != null) {
-      widgets.add(pw.Text('联系人：$contactName', style: captionStyle));
+    // 标题（用较大字号代替 bold，避免 pdf 库组合字体的空断言）
+    children.add(_safeText(title, chineseFont, 22, height: 1.3));
+    children.add(pw.SizedBox(height: 6));
+    children.add(_safeText('生成时间：$dateStr', chineseFont, 10, color: PdfColors.grey500));
+    if (contactName != null && contactName.isNotEmpty) {
+      children.add(pw.SizedBox(height: 2));
+      children.add(_safeText('联系人：$contactName', chineseFont, 10, color: PdfColors.grey500));
     }
-    widgets.add(pw.SizedBox(height: 12));
-    widgets.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
-    widgets.add(pw.SizedBox(height: 16));
+    children.add(pw.SizedBox(height: 14));
+    children.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
+    children.add(pw.SizedBox(height: 14));
 
-    widgets.add(pw.Text('使用说明', style: h2Style));
-    widgets.add(pw.SizedBox(height: 8));
-    widgets.add(pw.Text('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', style: style));
-    widgets.add(pw.Text('2. 对 AI 说：请按照此PDF文档的要求执行任务', style: style));
-    widgets.add(pw.Text('3. 等待 AI 返回分析结果', style: style));
-    widgets.add(pw.Text('4. 将 AI 的回复完整复制回 APP', style: style));
-    widgets.add(pw.SizedBox(height: 16));
+    // 使用说明
+    children.add(_safeText('使用说明', chineseFont, 16, height: 1.3));
+    children.add(pw.SizedBox(height: 8));
+    children.add(_safeText('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', chineseFont, 11, height: 1.5));
+    children.add(_safeText('2. 对 AI 说：请按照此PDF文档的要求执行任务', chineseFont, 11, height: 1.5));
+    children.add(_safeText('3. 等待 AI 返回分析结果', chineseFont, 11, height: 1.5));
+    children.add(_safeText('4. 将 AI 的回复完整复制回 APP', chineseFont, 11, height: 1.5));
+    children.add(pw.SizedBox(height: 16));
 
+    // 背景信息
     if (context != null && context.isNotEmpty) {
-      widgets.add(pw.Text('背景信息 / 素材', style: h2Style));
-      widgets.add(pw.SizedBox(height: 8));
-      widgets.add(
+      children.add(_safeText('背景信息 / 素材', chineseFont, 16, height: 1.3));
+      children.add(pw.SizedBox(height: 8));
+      children.add(
         pw.Container(
           padding: const pw.EdgeInsets.all(12),
           decoration: pw.BoxDecoration(
             border: pw.Border(left: pw.BorderSide(color: PdfColors.indigo400, width: 3)),
             color: PdfColors.indigo50,
           ),
-          child: pw.Text(context, style: quoteStyle),
+          child: _safeText(context, chineseFont, 11, color: PdfColors.grey700, height: 1.5),
         ),
       );
-      widgets.add(pw.SizedBox(height: 16));
+      children.add(pw.SizedBox(height: 16));
     }
 
-    widgets.add(pw.Text('AI 任务指令', style: h2Style));
-    widgets.add(pw.SizedBox(height: 8));
-    widgets.add(
+    // AI 任务指令
+    children.add(_safeText('AI 任务指令', chineseFont, 16, height: 1.3));
+    children.add(pw.SizedBox(height: 8));
+    children.add(
       pw.Container(
         padding: const pw.EdgeInsets.all(12),
         decoration: pw.BoxDecoration(
           color: PdfColors.grey50,
           borderRadius: pw.BorderRadius.circular(6),
         ),
-        child: pw.Text(prompt, style: style),
+        child: _safeText(prompt, chineseFont, 11, height: 1.5),
       ),
     );
-    widgets.add(pw.SizedBox(height: 16));
+    children.add(pw.SizedBox(height: 16));
 
+    // 附件列表
     if (attachments != null && attachments.isNotEmpty) {
-      widgets.add(pw.Text('附件/素材列表', style: h2Style));
-      widgets.add(pw.SizedBox(height: 8));
-      widgets.add(
-        pw.Text(
-          '以下素材已通过APP附加，请AI分析时结合考虑：',
-          style: _safeStyle(
-            font: chineseFont,
-            fontSize: 11,
-            color: PdfColors.grey600,
-          ),
-        ),
-      );
-      widgets.add(pw.SizedBox(height: 8));
+      children.add(_safeText('附件/素材列表', chineseFont, 16, height: 1.3));
+      children.add(pw.SizedBox(height: 8));
+      children.add(_safeText(
+        '以下素材已通过APP附加，请AI分析时结合考虑：',
+        chineseFont,
+        11,
+        color: PdfColors.grey600,
+      ));
+      children.add(pw.SizedBox(height: 8));
       for (final att in attachments) {
-        widgets.add(pw.Text('- $att', style: style));
+        children.add(_safeText('- $att', chineseFont, 11, height: 1.5));
       }
-      widgets.add(pw.SizedBox(height: 16));
+      children.add(pw.SizedBox(height: 16));
     }
 
-    widgets.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
-    widgets.add(pw.SizedBox(height: 12));
-    widgets.add(
+    children.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
+    children.add(pw.SizedBox(height: 12));
+
+    // 重要提示
+    children.add(
       pw.Container(
         padding: const pw.EdgeInsets.all(12),
         decoration: pw.BoxDecoration(
@@ -206,93 +192,79 @@ class PdfExporter {
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(
-              '重要提示：',
-              style: _safeStyle(
-                font: chineseFont,
-                fontSize: 12,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.amber800,
-              ),
-            ),
+            _safeText('重要提示：', chineseFont, 12, color: PdfColors.amber800),
             pw.SizedBox(height: 6),
-            pw.Text(
+            _safeText(
               '将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析 JSON 并保存为任务。',
-              style: _safeStyle(
-                font: chineseFont,
-                fontSize: 11,
-                color: PdfColors.amber700,
-              ),
+              chineseFont,
+              11,
+              color: PdfColors.amber700,
+              height: 1.5,
             ),
           ],
         ),
       ),
     );
 
-    try {
-      pdf.addPage(
-        pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          header: (pageContext) {
-            try {
-              final pageNumber = pageContext.pageNumber;
-              if (pageNumber == 1) {
-                return pw.SizedBox.shrink();
-              }
-              return pw.Container(
-                alignment: pw.Alignment.centerRight,
-                margin: const pw.EdgeInsets.only(bottom: 10),
-                child: pw.Text(
-                  '$title · $dateForHeader',
-                  style: captionStyle,
-                ),
-              );
-            } catch (_) {
-              return pw.SizedBox.shrink();
-            }
-          },
-          footer: (pageContext) {
-            try {
-              final pageNumber = pageContext.pageNumber;
-              final pagesCount = pageContext.pagesCount;
-              return pw.Container(
-                alignment: pw.Alignment.centerRight,
-                margin: const pw.EdgeInsets.only(top: 20),
-                child: pw.Text(
-                  '第 $pageNumber 页 / 共 $pagesCount 页',
-                  style: captionStyle,
-                ),
-              );
-            } catch (_) {
-              return pw.SizedBox.shrink();
-            }
-          },
-          build: (context) => widgets,
-        ),
-      );
-    } catch (e) {
-      // 如果 MultiPage 构建失败（比如字体样式冲突），退回到简单的单页模式
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: widgets,
-          ),
-        ),
-      );
-    }
+    final pdf = pw.Document();
 
-    final dir = await getTemporaryDirectory();
+    // 极端保守：只用 pw.Page，完全不使用 MultiPage / header / footer 回调
+    // （MultiPage 的 pagesCount/pageNumber 闭包在部分 pdf 版本内部存在 ! 断言）
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(40),
+        build: (pageContext) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: children,
+          );
+        },
+      ),
+    );
+
+    Directory dir;
+    try {
+      dir = await getTemporaryDirectory();
+    } catch (_) {
+      dir = Directory.systemTemp;
+    }
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
     final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final filePath = '${dir.path}/$fileName';
 
+    final List<int> bytes;
+    try {
+      bytes = await pdf.save();
+    } catch (e) {
+      // 如果内容渲染导致 save 失败，退回到最小内容 PDF
+      final fallback = pw.Document();
+      fallback.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (_) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(_sanitizeText(title), style: pw.TextStyle(fontSize: 20)),
+              pw.SizedBox(height: 12),
+              pw.Text(_sanitizeText('生成时间：$dateStr')),
+              pw.SizedBox(height: 20),
+              pw.Text(_sanitizeText('AI 任务指令'), style: pw.TextStyle(fontSize: 16)),
+              pw.SizedBox(height: 8),
+              pw.Text(_sanitizeText(prompt)),
+            ],
+          ),
+        ),
+      );
+      // ignore: avoid_print
+      print('[PdfExporter] 主PDF渲染失败，使用降级内容: $e');
+      bytes = await fallback.save();
+    }
+
     final file = File(filePath);
-    await file.writeAsBytes(await pdf.save());
+    await file.writeAsBytes(bytes);
 
     return file;
   }
