@@ -683,7 +683,6 @@ Future<void> _generateWithExternalAI(BuildContext context, Contact contact) asyn
 - 关系层级：${contact.levelName}
 ${contact.goalRelation != null ? '- 目标关系：${contact.goalRelation}' : ''}
 ${contact.tags.isNotEmpty ? '- 标签：${contact.tags.join('、')}' : ''}
-${contact.notes != null && contact.notes!.isNotEmpty ? '- 备注：${contact.notes}' : ''}
 
 请根据以上信息，生成具体可执行的社交任务，包括：
 1. 任务类型（如：发消息、打电话、社交互动等）

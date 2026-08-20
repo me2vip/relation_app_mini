@@ -718,33 +718,6 @@ class _TasksView extends StatelessWidget {
   }
 }
 
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          size: 16,
-          color: const Color(0xFF6366F1),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey.shade700,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// 首页关系升迁动态（全局跟踪视图）
 class _RelationshipFeedSection extends StatelessWidget {
   const _RelationshipFeedSection();
