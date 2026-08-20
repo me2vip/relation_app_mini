@@ -31,9 +31,13 @@ class PdfExporter {
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
           if (bytes.isEmpty) continue;
-          final font = pw.Font.ttf(bytes.buffer.asByteData());
-          _cachedChineseFont = font;
-          return font;
+          try {
+            final font = pw.Font.ttf(bytes.buffer.asByteData());
+            _cachedChineseFont = font;
+            return font;
+          } catch (_) {
+            // 字体格式不支持，继续尝试下一个
+          }
         }
       } catch (_) {}
     }
@@ -41,7 +45,7 @@ class PdfExporter {
     return null;
   }
 
-  static pw.TextStyle _style({
+  static pw.TextStyle _safeStyle({
     pw.Font? font,
     double? fontSize,
     pw.FontWeight? fontWeight,
@@ -50,23 +54,28 @@ class PdfExporter {
     pw.FontStyle? fontStyle,
     pw.TextDecoration? decoration,
   }) {
+    // 当没有中文字体时，不要设置 italic/bold 等扩展样式，
+    // 避免 pdf 内部 Helvetica 字体组合时触发空断言
+    final useFontStyle = font != null ? fontStyle : null;
+    final useFontWeight = font != null ? fontWeight : null;
+
     if (font != null) {
       return pw.TextStyle(
         font: font,
         fontSize: fontSize,
-        fontWeight: fontWeight,
+        fontWeight: useFontWeight,
         color: color,
         height: height,
-        fontStyle: fontStyle,
+        fontStyle: useFontStyle,
         decoration: decoration,
       );
     }
     return pw.TextStyle(
       fontSize: fontSize,
-      fontWeight: fontWeight,
+      fontWeight: useFontWeight,
       color: color,
       height: height,
-      fontStyle: fontStyle,
+      fontStyle: useFontStyle,
       decoration: decoration,
     );
   }
@@ -78,30 +87,35 @@ class PdfExporter {
     String? context,
     List<String>? attachments,
   }) async {
-    final chineseFont = await _loadChineseFont();
+    pw.Font? chineseFont;
+    try {
+      chineseFont = await _loadChineseFont();
+    } catch (_) {
+      chineseFont = null;
+    }
 
-    final style = _style(font: chineseFont, fontSize: 11, height: 1.5);
-    final h1Style = _style(
+    final style = _safeStyle(font: chineseFont, fontSize: 11, height: 1.5);
+    final h1Style = _safeStyle(
       font: chineseFont,
       fontSize: 22,
       fontWeight: pw.FontWeight.bold,
       height: 1.3,
     );
-    final h2Style = _style(
+    final h2Style = _safeStyle(
       font: chineseFont,
       fontSize: 16,
       fontWeight: pw.FontWeight.bold,
       height: 1.3,
     );
-    final captionStyle = _style(
+    final captionStyle = _safeStyle(
       font: chineseFont,
       fontSize: 10,
       color: PdfColors.grey500,
     );
-    final quoteStyle = _style(
+    final quoteStyle = _safeStyle(
       font: chineseFont,
       fontSize: 11,
-      fontStyle: pw.FontStyle.italic,
+      fontStyle: chineseFont != null ? pw.FontStyle.italic : null,
       color: PdfColors.grey700,
     );
 
@@ -122,16 +136,16 @@ class PdfExporter {
     widgets.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
     widgets.add(pw.SizedBox(height: 16));
 
-    widgets.add(pw.Text('📋 使用说明', style: h2Style));
+    widgets.add(pw.Text('使用说明', style: h2Style));
     widgets.add(pw.SizedBox(height: 8));
     widgets.add(pw.Text('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', style: style));
-    widgets.add(pw.Text('2. 对 AI 说："请按照此PDF文档的要求执行任务"', style: style));
+    widgets.add(pw.Text('2. 对 AI 说：请按照此PDF文档的要求执行任务', style: style));
     widgets.add(pw.Text('3. 等待 AI 返回分析结果', style: style));
     widgets.add(pw.Text('4. 将 AI 的回复完整复制回 APP', style: style));
     widgets.add(pw.SizedBox(height: 16));
 
     if (context != null && context.isNotEmpty) {
-      widgets.add(pw.Text('📌 背景信息 / 素材', style: h2Style));
+      widgets.add(pw.Text('背景信息 / 素材', style: h2Style));
       widgets.add(pw.SizedBox(height: 8));
       widgets.add(
         pw.Container(
@@ -146,7 +160,7 @@ class PdfExporter {
       widgets.add(pw.SizedBox(height: 16));
     }
 
-    widgets.add(pw.Text('🎯 AI 任务指令', style: h2Style));
+    widgets.add(pw.Text('AI 任务指令', style: h2Style));
     widgets.add(pw.SizedBox(height: 8));
     widgets.add(
       pw.Container(
@@ -161,12 +175,21 @@ class PdfExporter {
     widgets.add(pw.SizedBox(height: 16));
 
     if (attachments != null && attachments.isNotEmpty) {
-      widgets.add(pw.Text('📎 附件/素材列表', style: h2Style));
+      widgets.add(pw.Text('附件/素材列表', style: h2Style));
       widgets.add(pw.SizedBox(height: 8));
-      widgets.add(pw.Text('以下素材已通过APP附加，请AI分析时结合考虑：', style: quoteStyle.copyWith(color: PdfColors.grey600)));
+      widgets.add(
+        pw.Text(
+          '以下素材已通过APP附加，请AI分析时结合考虑：',
+          style: _safeStyle(
+            font: chineseFont,
+            fontSize: 11,
+            color: PdfColors.grey600,
+          ),
+        ),
+      );
       widgets.add(pw.SizedBox(height: 8));
       for (final att in attachments) {
-        widgets.add(pw.Text('• $att', style: style));
+        widgets.add(pw.Text('- $att', style: style));
       }
       widgets.add(pw.SizedBox(height: 16));
     }
@@ -184,8 +207,8 @@ class PdfExporter {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              '💡 重要提示：',
-              style: _style(
+              '重要提示：',
+              style: _safeStyle(
                 font: chineseFont,
                 fontSize: 12,
                 fontWeight: pw.FontWeight.bold,
@@ -195,7 +218,11 @@ class PdfExporter {
             pw.SizedBox(height: 6),
             pw.Text(
               '将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析 JSON 并保存为任务。',
-              style: quoteStyle.copyWith(color: PdfColors.amber700),
+              style: _safeStyle(
+                font: chineseFont,
+                fontSize: 11,
+                color: PdfColors.amber700,
+              ),
             ),
           ],
         ),
@@ -208,31 +235,54 @@ class PdfExporter {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(40),
           header: (pageContext) {
-            if (pageContext.pageNumber == 1) {
+            try {
+              final pageNumber = pageContext.pageNumber;
+              if (pageNumber == 1) {
+                return pw.SizedBox.shrink();
+              }
+              return pw.Container(
+                alignment: pw.Alignment.centerRight,
+                margin: const pw.EdgeInsets.only(bottom: 10),
+                child: pw.Text(
+                  '$title · $dateForHeader',
+                  style: captionStyle,
+                ),
+              );
+            } catch (_) {
               return pw.SizedBox.shrink();
             }
-            return pw.Container(
-              alignment: pw.Alignment.centerRight,
-              margin: const pw.EdgeInsets.only(bottom: 10),
-              child: pw.Text(
-                '$title · $dateForHeader',
-                style: captionStyle,
-              ),
-            );
           },
-          footer: (pageContext) => pw.Container(
-            alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(top: 20),
-            child: pw.Text(
-              '第 ${pageContext.pageNumber} 页 / 共 ${pageContext.pagesCount} 页',
-              style: captionStyle,
-            ),
-          ),
+          footer: (pageContext) {
+            try {
+              final pageNumber = pageContext.pageNumber;
+              final pagesCount = pageContext.pagesCount;
+              return pw.Container(
+                alignment: pw.Alignment.centerRight,
+                margin: const pw.EdgeInsets.only(top: 20),
+                child: pw.Text(
+                  '第 $pageNumber 页 / 共 $pagesCount 页',
+                  style: captionStyle,
+                ),
+              );
+            } catch (_) {
+              return pw.SizedBox.shrink();
+            }
+          },
           build: (context) => widgets,
         ),
       );
     } catch (e) {
-      rethrow;
+      // 如果 MultiPage 构建失败（比如字体样式冲突），退回到简单的单页模式
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: widgets,
+          ),
+        ),
+      );
     }
 
     final dir = await getTemporaryDirectory();
@@ -248,16 +298,20 @@ class PdfExporter {
   }
 
   static Future<void> sharePdf(File pdfFile) async {
-    await Printing.sharePdf(
-      bytes: await pdfFile.readAsBytes(),
-      filename: pdfFile.path.split('/').last,
-    );
+    try {
+      await Printing.sharePdf(
+        bytes: await pdfFile.readAsBytes(),
+        filename: pdfFile.path.split('/').last,
+      );
+    } catch (_) {}
   }
 
   static Future<void> printPdf(File pdfFile) async {
-    await Printing.layoutPdf(
-      onLayout: (format) async => await pdfFile.readAsBytes(),
-    );
+    try {
+      await Printing.layoutPdf(
+        onLayout: (format) async => await pdfFile.readAsBytes(),
+      );
+    } catch (_) {}
   }
 
   static Future<File?> downloadImage(String url, String fileName) async {

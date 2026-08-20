@@ -264,8 +264,9 @@ class Contact {
 
   /// 获取联系人所属所有分组ID列表
   List<String> get groupIds {
-    if (groupId == null || groupId!.isEmpty) return [];
-    return groupId!.split(',').where((g) => g.isNotEmpty).toList();
+    final gid = groupId;
+    if (gid == null || gid.isEmpty) return [];
+    return gid.split(',').where((g) => g.isNotEmpty).toList();
   }
 
   Contact copyWith({

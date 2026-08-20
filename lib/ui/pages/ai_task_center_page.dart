@@ -359,11 +359,20 @@ class _MaterialTabState extends State<_MaterialTab> {
       final result = await FilePicker.platform.pickFiles(type: FileType.audio);
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
+      final path = file.path;
+      if (path == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('无法获取音频文件路径，请尝试其他文件')),
+          );
+        }
+        return;
+      }
       final data = context.read<_TaskCenterData>();
       final att = MediaAttachment(
         id: const Uuid().v4(),
         type: MediaType.audio,
-        filePath: file.path!,
+        filePath: path,
         fileName: file.name,
         fileSize: file.size ?? 0,
         description: '',
@@ -391,10 +400,12 @@ class _MaterialTabState extends State<_MaterialTab> {
       if (result == null || result.files.isEmpty) return;
       final data = context.read<_TaskCenterData>();
       for (final file in result.files) {
+        final path = file.path;
+        if (path == null) continue;
         final att = MediaAttachment(
           id: const Uuid().v4(),
           type: MediaType.file,
-          filePath: file.path!,
+          filePath: path,
           fileName: file.name,
           fileSize: file.size ?? 0,
           description: '',
@@ -844,14 +855,20 @@ class _MediaItemTileState extends State<_MediaItemTile> {
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    att.description != null && att.description!.isNotEmpty
-                        ? att.description!
-                        : '点击添加描述（可选）',
+                    (() {
+                      final desc = att.description;
+                      return desc != null && desc.isNotEmpty
+                          ? desc
+                          : '点击添加描述（可选）';
+                    })(),
                     style: TextStyle(
                       fontSize: 12,
-                      color: att.description != null && att.description!.isNotEmpty
-                          ? Colors.black87
-                          : Colors.grey.shade500,
+                      color: (() {
+                        final desc = att.description;
+                        return desc != null && desc.isNotEmpty
+                            ? Colors.black87
+                            : Colors.grey.shade500;
+                      })(),
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -1099,19 +1116,40 @@ class _ExportTabState extends State<_ExportTab> {
         attachments: attachments.isNotEmpty ? attachments : null,
       );
 
-      setState(() => _pdfPath = file.path);
+      final savedPath = file.path;
+      setState(() => _pdfPath = savedPath);
 
       if (mounted) {
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
-          text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议',
-        );
+        try {
+          await Share.shareXFiles(
+            [XFile(savedPath)],
+            subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
+            text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议',
+          );
+        } catch (shareErr) {
+          // 分享失败不影响PDF已生成的状态
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('PDF已保存，但分享失败: $shareErr'),
+                duration: const Duration(seconds: 3),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+          }
+        }
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
       if (mounted) {
+        final msg = e.toString();
+        // ignore: avoid_print
+        print('[PDF导出异常] $msg\n$stackTrace');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('导出失败: $e')),
+          SnackBar(
+            content: Text('导出失败: $msg'),
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } finally {
@@ -1135,6 +1173,7 @@ class _ExportTabState extends State<_ExportTab> {
     final contactProvider = context.watch<ContactProvider>();
     final prompt = _buildPrompt(data, contactProvider);
     final executionPrompt = _getAiExecutionPrompt();
+    final savedPdfPath = _pdfPath;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1227,18 +1266,18 @@ class _ExportTabState extends State<_ExportTab> {
             ),
           ],
         ),
-        if (_pdfPath != null) ...[
+        if (savedPdfPath != null) ...[
           const SizedBox(height: 16),
           Card(
             child: ListTile(
               leading: const Icon(Icons.check_circle, color: Colors.green),
               title: const Text('PDF已生成'),
-              subtitle: Text(_pdfPath!),
+              subtitle: Text(savedPdfPath),
               trailing: IconButton(
                 icon: const Icon(Icons.share),
                 onPressed: () async {
                   await Share.shareXFiles(
-                    [XFile(_pdfPath!)],
+                    [XFile(savedPdfPath)],
                     subject: '社交任务AI素材',
                   );
                 },
@@ -1367,6 +1406,8 @@ class _PasteResultTabState extends State<_PasteResultTab> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
+      final data = context.read<_TaskCenterData>();
+      final contactProvider = context.read<ContactProvider>();
       final tasks = _parseAIImage(_resultController.text);
 
       if (tasks.isEmpty) {
@@ -1384,10 +1425,21 @@ class _PasteResultTabState extends State<_PasteResultTab> {
         taskProvider.addTask(task);
       }
 
+      // 保存到历史记录（闭环）
+      final prompt = _buildPromptForHistory(data, contactProvider);
+      final history = TaskHistory(
+        id: const Uuid().v4(),
+        aiResult: _resultController.text,
+        taskCount: tasks.length,
+        createdAt: DateTime.now(),
+        prompt: prompt,
+      );
+      data.addHistory(history);
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('成功创建 ${tasks.length} 个任务！'),
+            content: Text('成功创建 ${tasks.length} 个任务！已保存到历史记录'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1402,6 +1454,24 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     } finally {
       if (mounted) setState(() => _isParsing = false);
     }
+  }
+
+  String _buildPromptForHistory(_TaskCenterData data, ContactProvider cp) {
+    final contacts = data.contactIds
+        .map((id) => cp.contacts.where((c) => c.id == id).firstOrNull?.name ?? id)
+        .join('、');
+    final attachs = data.getAttachmentDescriptions();
+    final buffer = StringBuffer();
+    buffer.writeln('【任务上下文】${data.sourceText.isEmpty ? '(无)' : data.sourceText}');
+    buffer.writeln('【联系人】${contacts.isEmpty ? '(未选)' : contacts}');
+    buffer.writeln('【周期】${data.days.join('/')}');
+    buffer.writeln('【素材数量】${attachs.length}');
+    if (attachs.isNotEmpty) {
+      for (var i = 0; i < attachs.length; i++) {
+        buffer.writeln('  ${i + 1}. ${attachs[i]['type']}: ${attachs[i]['name']}');
+      }
+    }
+    return buffer.toString().trim();
   }
 
   List<SocialTask> _parseAIImage(String aiResponse) {
