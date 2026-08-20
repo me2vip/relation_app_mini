@@ -695,7 +695,7 @@ IconData _getModelIcon(AIModelProvider provider) {
       return Icons.smart_toy;
     case AIModelProvider.claude:
       return Icons.psychology;
-    case AIModelProvider.alibaba:
+    case AIModelProvider.dashscope:
       return Icons.auto_awesome;
     case AIModelProvider.local:
       return Icons.computer;
