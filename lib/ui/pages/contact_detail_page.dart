@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/ai_provider.dart';
+import '../../core/utils/pdf_exporter.dart';
 import '../../models/contact.dart';
 import '../../models/task.dart';
 import '../../models/ai_config.dart';
@@ -665,29 +667,61 @@ Future<void> _generateWithInternalAI(
 }
 
 Future<void> _generateWithExternalAI(BuildContext context, Contact contact) async {
-  // 导航到外部AI页面，预填充联系人和任务生成提示词
-  Navigator.pushNamed(
-    context, 
-    '/external-ai',
-    arguments: {
-      'contactId': contact.id,
-      'title': '为 ${contact.name} 生成社交任务',
-      'prompt': '''请为联系人「${contact.name}」生成未来7天的社交任务建议。
+  // 显示加载指示器
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => const Center(child: CircularProgressIndicator()),
+  );
+  
+  try {
+    // 自动生成提示词
+    final prompt = '''请为联系人「${contact.name}」生成未来7天的社交任务建议。
 
 联系人信息：
 - 姓名：${contact.name}
 - 关系层级：${contact.levelName}
 ${contact.goalRelation != null ? '- 目标关系：${contact.goalRelation}' : ''}
 ${contact.tags.isNotEmpty ? '- 标签：${contact.tags.join('、')}' : ''}
+${contact.notes != null && contact.notes!.isNotEmpty ? '- 备注：${contact.notes}' : ''}
 
 请根据以上信息，生成具体可执行的社交任务，包括：
 1. 任务类型（如：发消息、打电话、社交互动等）
 2. 任务标题
 3. 具体描述
-4. 建议执行时间''',
-    },
-  );
+4. 建议执行时间
+5. 优先级（高/中/低）''';
+    
+    // 导出 PDF
+    final file = await PdfExporter.exportExternalAIPdf(
+      title: '为 ${contact.name} 生成社交任务',
+      prompt: prompt,
+      contactName: contact.name,
+    );
+    
+    // 关闭加载指示器
+    if (context.mounted) Navigator.pop(context);
+    
+    // 分享 PDF
+    if (context.mounted) {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        subject: '为 ${contact.name} 生成社交任务',
+        text: '请将此 PDF 发送给外部 AI（千问、豆包等），让 AI 按文档要求生成任务建议',
+      );
+    }
+  } catch (e) {
+    // 关闭加载指示器
+    if (context.mounted) Navigator.pop(context);
+    
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('导出失败: $e')),
+      );
+    }
+  }
 }
+
 
 IconData _getModelIcon(AIModelProvider provider) {
   switch (provider) {

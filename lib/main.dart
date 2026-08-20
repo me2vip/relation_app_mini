@@ -11,11 +11,8 @@ import 'ui/pages/splash_page.dart';
 import 'ui/pages/home_page.dart';
 import 'ui/pages/contacts_page.dart';
 import 'ui/pages/tasks_page.dart';
-import 'ui/pages/ai_page.dart';
 import 'ui/pages/settings_page.dart';
 import 'ui/pages/contact_detail_page.dart';
-import 'ui/pages/ai_chat_page.dart';
-import 'ui/pages/external_ai_page.dart';
 import 'ui/pages/about_page.dart';
 import 'ui/pages/notification_settings_page.dart';
 import 'ui/pages/privacy_settings_page.dart';
@@ -25,6 +22,7 @@ import 'ui/pages/persona_edit_page.dart';
 import 'ui/pages/temp_material_page.dart';
 import 'ui/pages/dynamic_post_page.dart';
 import 'ui/pages/channel_manage_page.dart';
+import 'ui/pages/ai_model_manage_page.dart';
 import 'services/notification_service.dart';
 
 // GlobalKey 用于访问 MyApp 状态
@@ -138,11 +136,8 @@ class _MyAppState extends State<MyApp> {
           '/home': (context) => const HomePage(),
           '/contacts': (context) => const ContactsPage(),
           '/tasks': (context) => const TasksPage(),
-          '/ai': (context) => const AIPage(),
           '/settings': (context) => const SettingsPage(),
           '/contact': (context) => const ContactDetailPage(),
-          '/ai-chat': (context) => const AIChatPage(),
-          '/external-ai': (context) => const ExternalAIPage(),
           '/about': (context) => const AboutPage(),
           '/privacy-settings': (context) => const PrivacySettingsPage(),
           '/notification-settings': (context) => const NotificationSettingsPage(),
@@ -152,6 +147,7 @@ class _MyAppState extends State<MyApp> {
           '/temp-material': (context) => const TempMaterialPage(),
           '/dynamic-post': (context) => const DynamicPostPage(),
           '/channels': (context) => const ChannelManagePage(),
+          '/ai-models': (context) => const AIModelManagePage(),
         },
       ),
     );
