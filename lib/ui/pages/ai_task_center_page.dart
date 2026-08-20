@@ -1426,10 +1426,16 @@ class _PasteResultTabState extends State<_PasteResultTab> {
       }
 
       // 保存到历史记录（闭环）
-      final prompt = _buildPromptForHistory(data, contactProvider);
+      final contactNames = data.contactIds
+          .map((id) => contactProvider.contacts
+              .where((c) => c.id == id)
+              .firstOrNull?.name ?? id)
+          .toList();
+      final prompt = _buildPromptForHistory(data);
       final history = TaskHistory(
         id: const Uuid().v4(),
-        aiResult: _resultController.text,
+        sourceText: data.sourceText,
+        contactNames: contactNames,
         taskCount: tasks.length,
         createdAt: DateTime.now(),
         prompt: prompt,
@@ -1456,19 +1462,15 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     }
   }
 
-  String _buildPromptForHistory(_TaskCenterData data, ContactProvider cp) {
-    final contacts = data.contactIds
-        .map((id) => cp.contacts.where((c) => c.id == id).firstOrNull?.name ?? id)
-        .join('、');
+  String _buildPromptForHistory(_TaskCenterData data) {
     final attachs = data.getAttachmentDescriptions();
     final buffer = StringBuffer();
     buffer.writeln('【任务上下文】${data.sourceText.isEmpty ? '(无)' : data.sourceText}');
-    buffer.writeln('【联系人】${contacts.isEmpty ? '(未选)' : contacts}');
     buffer.writeln('【周期】${data.days.join('/')}');
     buffer.writeln('【素材数量】${attachs.length}');
     if (attachs.isNotEmpty) {
       for (var i = 0; i < attachs.length; i++) {
-        buffer.writeln('  ${i + 1}. ${attachs[i]['type']}: ${attachs[i]['name']}');
+        buffer.writeln('  ${i + 1}. ${attachs[i]}');
       }
     }
     return buffer.toString().trim();
