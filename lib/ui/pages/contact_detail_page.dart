@@ -473,19 +473,28 @@ class _TaskTab extends StatelessWidget {
 
         if (tasks.isEmpty) {
           return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.task_alt, size: 80, color: Colors.grey),
-                const SizedBox(height: 20),
-                const Text('还没有任务'),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () => _generateAITasks(context, contact),
-                  icon: const Icon(Icons.auto_awesome),
-                  label: const Text('AI生成任务'),
-                ),
-              ],
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.task_alt, size: 80, color: Colors.grey),
+                  const SizedBox(height: 20),
+                  const Text('还没有任务'),
+                  const SizedBox(height: 20),
+                  ElevatedButton.icon(
+                    onPressed: () => _generateAITasks(context, contact),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('AI生成任务'),
+                  ),
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.pushNamed(context, '/ai-task-center'),
+                    icon: const Icon(Icons.auto_awesome_outlined),
+                    label: const Text('AI任务中心'),
+                  ),
+                ],
+              ),
             ),
           );
         }
@@ -596,7 +605,7 @@ Future<void> _generateAITasks(BuildContext context, Contact contact) async {
   if (result == 'internal') {
     await _generateWithInternalAI(context, contact, models);
   } else if (result == 'external') {
-    await _generateWithExternalAI(context, contact);
+    Navigator.pushNamed(context, '/ai-task-center');
   }
 }
 

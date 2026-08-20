@@ -50,13 +50,25 @@ class _SettingsPageState extends State<SettingsPage> {
             title: 'AI设置',
             children: [
               _SettingsTile(
+                icon: Icons.auto_awesome,
+                title: 'AI任务中心',
+                subtitle: '统一的AI任务生成入口，支持外部AI流程',
+                onTap: () => Navigator.pushNamed(context, '/ai-task-center'),
+              ),
+              _SettingsTile(
                 icon: Icons.smart_toy_outlined,
                 title: 'AI模型配置',
                 subtitle: '管理AI模型和API密钥',
                 onTap: () => Navigator.pushNamed(context, '/ai-models'),
               ),
               _SettingsTile(
-                icon: Icons.auto_awesome,
+                icon: Icons.article_outlined,
+                title: '临时素材库',
+                subtitle: '管理对话素材、朋友圈素材等',
+                onTap: () => Navigator.pushNamed(context, '/temp-material'),
+              ),
+              _SettingsTile(
+                icon: Icons.tune,
                 title: '任务生成配置',
                 subtitle: '设置AI生成任务的规则',
                 onTap: () => Navigator.pushNamed(context, '/ai-models'),

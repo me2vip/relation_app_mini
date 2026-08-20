@@ -40,22 +40,6 @@ class PdfExporter {
     return null;
   }
 
-  static pw.TextStyle _cnStyle({
-    pw.Font? font,
-    double? fontSize,
-    pw.FontWeight? fontWeight,
-    pw.Color? color,
-    double? height,
-  }) {
-    return pw.TextStyle(
-      font: font,
-      fontSize: fontSize,
-      fontWeight: fontWeight,
-      color: color,
-      height: height,
-    );
-  }
-
   static Future<File> exportExternalAIPdf({
     required String title,
     required String prompt,
@@ -64,86 +48,140 @@ class PdfExporter {
     List<String>? attachments,
   }) async {
     final chineseFont = await _loadChineseFont();
+    final style = chineseFont != null
+        ? pw.TextStyle(font: chineseFont, fontSize: 11, height: 1.5)
+        : const pw.TextStyle(fontSize: 11, height: 1.5);
+    final h1Style = chineseFont != null
+        ? pw.TextStyle(
+            font: chineseFont,
+            fontSize: 22,
+            fontWeight: pw.FontWeight.bold,
+            height: 1.3,
+          )
+        : const pw.TextStyle(
+            fontSize: 22,
+            fontWeight: pw.FontWeight.bold,
+            height: 1.3,
+          );
+    final h2Style = chineseFont != null
+        ? pw.TextStyle(
+            font: chineseFont,
+            fontSize: 16,
+            fontWeight: pw.FontWeight.bold,
+            height: 1.3,
+          )
+        : const pw.TextStyle(
+            fontSize: 16,
+            fontWeight: pw.FontWeight.bold,
+            height: 1.3,
+          );
+    final h3Style = chineseFont != null
+        ? pw.TextStyle(
+            font: chineseFont,
+            fontSize: 14,
+            fontWeight: pw.FontWeight.bold,
+          )
+        : const pw.TextStyle(
+            fontSize: 14,
+            fontWeight: pw.FontWeight.bold,
+          );
+    final captionStyle = chineseFont != null
+        ? pw.TextStyle(
+            font: chineseFont,
+            fontSize: 10,
+            color: PdfColors.grey500,
+          )
+        : const pw.TextStyle(fontSize: 10, color: PdfColors.grey500);
+    final quoteStyle = chineseFont != null
+        ? pw.TextStyle(
+            font: chineseFont,
+            fontSize: 11,
+            fontStyle: pw.FontStyle.italic,
+            color: PdfColors.grey700,
+          )
+        : const pw.TextStyle(
+            fontSize: 11,
+            fontStyle: pw.FontStyle.italic,
+            color: PdfColors.grey700,
+          );
 
     final pdf = pw.Document();
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
+    final dateForHeader = DateFormat('yyyy年MM月dd日').format(now);
 
-    final buffer = StringBuffer();
-    buffer.writeln('# $title');
-    buffer.writeln('');
-    buffer.writeln('> **生成时间：** $dateStr');
+    final widgets = <pw.Widget>[];
+
+    widgets.add(pw.Text(title, style: h1Style));
+    widgets.add(pw.SizedBox(height: 8));
+    widgets.add(pw.Text('生成时间：$dateStr', style: captionStyle));
     if (contactName != null) {
-      buffer.writeln('> **联系人：** $contactName');
+      widgets.add(pw.Text('联系人：$contactName', style: captionStyle));
     }
-    buffer.writeln('');
-    buffer.writeln('---');
-    buffer.writeln('');
+    widgets.add(pw.SizedBox(height: 12));
+    widgets.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
+    widgets.add(pw.SizedBox(height: 16));
 
-    buffer.writeln('## 📋 使用说明');
-    buffer.writeln('');
-    buffer.writeln('1. 将此文档发送给 AI（千问、豆包等）');
-    buffer.writeln('2. 对 AI 说：**"按pdf要求执行"**');
-    buffer.writeln('3. 等待 AI 返回分析结果');
-    buffer.writeln('4. 将 AI 的回复完整复制回 APP');
-    buffer.writeln('');
+    widgets.add(pw.Text('📋 使用说明', style: h2Style));
+    widgets.add(pw.SizedBox(height: 8));
+    widgets.add(pw.Text('1. 将此文档发送给 AI（千问、豆包等）', style: style));
+    widgets.add(pw.Text('2. 对 AI 说："按pdf要求执行"', style: style));
+    widgets.add(pw.Text('3. 等待 AI 返回分析结果', style: style));
+    widgets.add(pw.Text('4. 将 AI 的回复完整复制回 APP', style: style));
+    widgets.add(pw.SizedBox(height: 16));
 
     if (context != null && context.isNotEmpty) {
-      buffer.writeln('## 📌 背景信息');
-      buffer.writeln('');
-      buffer.writeln(context);
-      buffer.writeln('');
+      widgets.add(pw.Text('📌 背景信息', style: h2Style));
+      widgets.add(pw.SizedBox(height: 8));
+      widgets.add(
+        pw.Container(
+          padding: const pw.EdgeInsets.all(12),
+          decoration: const pw.BoxDecoration(
+            border: pw.Border(left: pw.BorderSide(color: PdfColors.indigo400, width: 3)),
+            color: PdfColors.indigo50,
+          ),
+          child: pw.Text(context, style: quoteStyle),
+        ),
+      );
+      widgets.add(pw.SizedBox(height: 16));
     }
 
-    buffer.writeln('## 🎯 任务要求');
-    buffer.writeln('');
-    buffer.writeln(prompt);
-    buffer.writeln('');
+    widgets.add(pw.Text('🎯 任务要求', style: h2Style));
+    widgets.add(pw.SizedBox(height: 8));
+    widgets.add(
+      pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          color: PdfColors.grey50,
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Text(prompt, style: style),
+      ),
+    );
+    widgets.add(pw.SizedBox(height: 16));
 
     if (attachments != null && attachments.isNotEmpty) {
-      buffer.writeln('## 📎 附件内容');
-      buffer.writeln('');
+      widgets.add(pw.Text('📎 附件内容', style: h2Style));
+      widgets.add(pw.SizedBox(height: 8));
       for (final att in attachments) {
-        buffer.writeln('- $att');
+        widgets.add(pw.Text('• $att', style: style));
       }
-      buffer.writeln('');
+      widgets.add(pw.SizedBox(height: 16));
     }
 
-    buffer.writeln('---');
-    buffer.writeln('');
-    buffer.writeln('> **💡 提示：** 请将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析并保存结果。');
-
-    final markdownText = buffer.toString();
-
-    final baseStyle = pw.Style(
-      textStyle: _cnStyle(font: chineseFont, fontSize: 11, height: 1.5),
-      h1: _cnStyle(font: chineseFont, fontSize: 22, fontWeight: pw.FontWeight.bold, height: 1.3),
-      h2: _cnStyle(font: chineseFont, fontSize: 16, fontWeight: pw.FontWeight.bold, height: 1.3),
-      h3: _cnStyle(font: chineseFont, fontSize: 14, fontWeight: pw.FontWeight.bold),
-      h4: _cnStyle(font: chineseFont, fontSize: 12, fontWeight: pw.FontWeight.bold),
-      normal: _cnStyle(font: chineseFont, fontSize: 11, height: 1.5),
-      em: _cnStyle(font: chineseFont, fontSize: 11, fontStyle: pw.FontStyle.italic),
-      strong: _cnStyle(font: chineseFont, fontSize: 11, fontWeight: pw.FontWeight.bold),
-      del: _cnStyle(font: chineseFont, fontSize: 11, decoration: pw.TextDecoration.lineThrough),
-      link: _cnStyle(font: chineseFont, fontSize: 11, color: PdfColors.blue),
-      hr: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey400, width: 0.5)),
-      tableHead: _cnStyle(font: chineseFont, fontSize: 11, fontWeight: pw.FontWeight.bold),
-      tableHeaderDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-      tableBodyDecoration: const pw.BoxDecoration(color: PdfColors.white),
-      code: pw.TextStyle(
-        font: pw.Font.courier(),
-        fontSize: 10,
-        background: const pw.BoxDecoration(color: PdfColors.grey100),
+    widgets.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
+    widgets.add(pw.SizedBox(height: 12));
+    widgets.add(
+      pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.amber50,
+        ),
+        child: pw.Text(
+          '💡 提示：请将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析并保存结果。',
+          style: quoteStyle.copyWith(color: PdfColors.amber800),
+        ),
       ),
-      codeBlockDecoration: pw.BoxDecoration(
-        color: PdfColors.grey100,
-        borderRadius: pw.BorderRadius.circular(4),
-        border: pw.Border.all(color: PdfColors.grey300),
-      ),
-      blockQuoteDecoration: pw.BoxDecoration(
-        border: pw.Border(left: pw.BorderSide(color: PdfColors.indigo400, width: 3)),
-      ),
-      blockPadding: const pw.EdgeInsets.all(8),
     );
 
     pdf.addPage(
@@ -156,12 +194,8 @@ class PdfExporter {
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(bottom: 10),
             child: pw.Text(
-              '$title · ${DateFormat('yyyy年MM月dd日').format(now)}',
-              style: _cnStyle(
-                font: chineseFont,
-                fontSize: 9,
-                color: PdfColors.grey500,
-              ),
+              '$title · $dateForHeader',
+              style: captionStyle,
             ),
           );
         },
@@ -170,20 +204,10 @@ class PdfExporter {
           margin: const pw.EdgeInsets.only(top: 20),
           child: pw.Text(
             '第 ${pageContext.pageNumber} 页 / 共 ${pageContext.pagesCount} 页',
-            style: _cnStyle(
-              font: chineseFont,
-              fontSize: 9,
-              color: PdfColors.grey500,
-            ),
+            style: captionStyle,
           ),
         ),
-        build: (context) => [
-          pw.Markdown(
-            data: markdownText,
-            style: baseStyle,
-            onReply: () {},
-          ),
-        ],
+        build: (context) => widgets,
       ),
     );
 
