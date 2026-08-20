@@ -30,6 +30,7 @@ class PdfExporter {
         final file = File(path);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
+          if (bytes.isEmpty) continue;
           final font = pw.Font.ttf(bytes.buffer.asByteData());
           _cachedChineseFont = font;
           return font;
@@ -40,6 +41,36 @@ class PdfExporter {
     return null;
   }
 
+  static pw.TextStyle _style({
+    pw.Font? font,
+    double? fontSize,
+    pw.FontWeight? fontWeight,
+    pw.Color? color,
+    double? height,
+    pw.FontStyle? fontStyle,
+    pw.TextDecoration? decoration,
+  }) {
+    if (font != null) {
+      return pw.TextStyle(
+        font: font,
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        height: height,
+        fontStyle: fontStyle,
+        decoration: decoration,
+      );
+    }
+    return pw.TextStyle(
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      height: height,
+      fontStyle: fontStyle,
+      decoration: decoration,
+    );
+  }
+
   static Future<File> exportExternalAIPdf({
     required String title,
     required String prompt,
@@ -48,62 +79,31 @@ class PdfExporter {
     List<String>? attachments,
   }) async {
     final chineseFont = await _loadChineseFont();
-    final style = chineseFont != null
-        ? pw.TextStyle(font: chineseFont, fontSize: 11, height: 1.5)
-        : const pw.TextStyle(fontSize: 11, height: 1.5);
-    final h1Style = chineseFont != null
-        ? pw.TextStyle(
-            font: chineseFont,
-            fontSize: 22,
-            fontWeight: pw.FontWeight.bold,
-            height: 1.3,
-          )
-        : const pw.TextStyle(
-            fontSize: 22,
-            fontWeight: pw.FontWeight.bold,
-            height: 1.3,
-          );
-    final h2Style = chineseFont != null
-        ? pw.TextStyle(
-            font: chineseFont,
-            fontSize: 16,
-            fontWeight: pw.FontWeight.bold,
-            height: 1.3,
-          )
-        : const pw.TextStyle(
-            fontSize: 16,
-            fontWeight: pw.FontWeight.bold,
-            height: 1.3,
-          );
-    final h3Style = chineseFont != null
-        ? pw.TextStyle(
-            font: chineseFont,
-            fontSize: 14,
-            fontWeight: pw.FontWeight.bold,
-          )
-        : const pw.TextStyle(
-            fontSize: 14,
-            fontWeight: pw.FontWeight.bold,
-          );
-    final captionStyle = chineseFont != null
-        ? pw.TextStyle(
-            font: chineseFont,
-            fontSize: 10,
-            color: PdfColors.grey500,
-          )
-        : const pw.TextStyle(fontSize: 10, color: PdfColors.grey500);
-    final quoteStyle = chineseFont != null
-        ? pw.TextStyle(
-            font: chineseFont,
-            fontSize: 11,
-            fontStyle: pw.FontStyle.italic,
-            color: PdfColors.grey700,
-          )
-        : const pw.TextStyle(
-            fontSize: 11,
-            fontStyle: pw.FontStyle.italic,
-            color: PdfColors.grey700,
-          );
+
+    final style = _style(font: chineseFont, fontSize: 11, height: 1.5);
+    final h1Style = _style(
+      font: chineseFont,
+      fontSize: 22,
+      fontWeight: pw.FontWeight.bold,
+      height: 1.3,
+    );
+    final h2Style = _style(
+      font: chineseFont,
+      fontSize: 16,
+      fontWeight: pw.FontWeight.bold,
+      height: 1.3,
+    );
+    final captionStyle = _style(
+      font: chineseFont,
+      fontSize: 10,
+      color: PdfColors.grey500,
+    );
+    final quoteStyle = _style(
+      font: chineseFont,
+      fontSize: 11,
+      fontStyle: pw.FontStyle.italic,
+      color: PdfColors.grey700,
+    );
 
     final pdf = pw.Document();
     final now = DateTime.now();
@@ -124,14 +124,14 @@ class PdfExporter {
 
     widgets.add(pw.Text('📋 使用说明', style: h2Style));
     widgets.add(pw.SizedBox(height: 8));
-    widgets.add(pw.Text('1. 将此文档发送给 AI（千问、豆包等）', style: style));
-    widgets.add(pw.Text('2. 对 AI 说："按pdf要求执行"', style: style));
+    widgets.add(pw.Text('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', style: style));
+    widgets.add(pw.Text('2. 对 AI 说："请按照此PDF文档的要求执行任务"', style: style));
     widgets.add(pw.Text('3. 等待 AI 返回分析结果', style: style));
     widgets.add(pw.Text('4. 将 AI 的回复完整复制回 APP', style: style));
     widgets.add(pw.SizedBox(height: 16));
 
     if (context != null && context.isNotEmpty) {
-      widgets.add(pw.Text('📌 背景信息', style: h2Style));
+      widgets.add(pw.Text('📌 背景信息 / 素材', style: h2Style));
       widgets.add(pw.SizedBox(height: 8));
       widgets.add(
         pw.Container(
@@ -146,7 +146,7 @@ class PdfExporter {
       widgets.add(pw.SizedBox(height: 16));
     }
 
-    widgets.add(pw.Text('🎯 任务要求', style: h2Style));
+    widgets.add(pw.Text('🎯 AI 任务指令', style: h2Style));
     widgets.add(pw.SizedBox(height: 8));
     widgets.add(
       pw.Container(
@@ -161,7 +161,9 @@ class PdfExporter {
     widgets.add(pw.SizedBox(height: 16));
 
     if (attachments != null && attachments.isNotEmpty) {
-      widgets.add(pw.Text('📎 附件内容', style: h2Style));
+      widgets.add(pw.Text('📎 附件/素材列表', style: h2Style));
+      widgets.add(pw.SizedBox(height: 8));
+      widgets.add(pw.Text('以下素材已通过APP附加，请AI分析时结合考虑：', style: quoteStyle.copyWith(color: PdfColors.grey600)));
       widgets.add(pw.SizedBox(height: 8));
       for (final att in attachments) {
         widgets.add(pw.Text('• $att', style: style));
@@ -176,40 +178,62 @@ class PdfExporter {
         padding: const pw.EdgeInsets.all(12),
         decoration: pw.BoxDecoration(
           color: PdfColors.amber50,
+          borderRadius: pw.BorderRadius.circular(8),
         ),
-        child: pw.Text(
-          '💡 提示：请将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析并保存结果。',
-          style: quoteStyle.copyWith(color: PdfColors.amber800),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              '💡 重要提示：',
+              style: _style(
+                font: chineseFont,
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.amber800,
+              ),
+            ),
+            pw.SizedBox(height: 6),
+            pw.Text(
+              '将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析 JSON 并保存为任务。',
+              style: quoteStyle.copyWith(color: PdfColors.amber700),
+            ),
+          ],
         ),
       ),
     );
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
-        header: (pageContext) {
-          if (pageContext.pageNumber == 1) return pw.SizedBox.shrink();
-          return pw.Container(
+    try {
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          header: (pageContext) {
+            if (pageContext.pageNumber == 1) {
+              return pw.SizedBox.shrink();
+            }
+            return pw.Container(
+              alignment: pw.Alignment.centerRight,
+              margin: const pw.EdgeInsets.only(bottom: 10),
+              child: pw.Text(
+                '$title · $dateForHeader',
+                style: captionStyle,
+              ),
+            );
+          },
+          footer: (pageContext) => pw.Container(
             alignment: pw.Alignment.centerRight,
-            margin: const pw.EdgeInsets.only(bottom: 10),
+            margin: const pw.EdgeInsets.only(top: 20),
             child: pw.Text(
-              '$title · $dateForHeader',
+              '第 ${pageContext.pageNumber} 页 / 共 ${pageContext.pagesCount} 页',
               style: captionStyle,
             ),
-          );
-        },
-        footer: (pageContext) => pw.Container(
-          alignment: pw.Alignment.centerRight,
-          margin: const pw.EdgeInsets.only(top: 20),
-          child: pw.Text(
-            '第 ${pageContext.pageNumber} 页 / 共 ${pageContext.pagesCount} 页',
-            style: captionStyle,
           ),
+          build: (context) => widgets,
         ),
-        build: (context) => widgets,
-      ),
-    );
+      );
+    } catch (e) {
+      rethrow;
+    }
 
     final dir = await getTemporaryDirectory();
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);

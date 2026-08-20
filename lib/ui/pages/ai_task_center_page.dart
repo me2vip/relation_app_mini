@@ -4,11 +4,78 @@ import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/services.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/utils/pdf_exporter.dart';
 import '../../models/task.dart';
 import '../../models/contact.dart';
+
+enum MediaType { image, video, audio, file }
+
+class MediaAttachment {
+  final String id;
+  final MediaType type;
+  final String filePath;
+  final String fileName;
+  final int fileSize;
+  final String? description;
+
+  const MediaAttachment({
+    required this.id,
+    required this.type,
+    required this.filePath,
+    required this.fileName,
+    required this.fileSize,
+    this.description,
+  });
+
+  MediaAttachment copyWith({
+    String? id,
+    MediaType? type,
+    String? filePath,
+    String? fileName,
+    int? fileSize,
+    String? description,
+  }) {
+    return MediaAttachment(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      filePath: filePath ?? this.filePath,
+      fileName: fileName ?? this.fileName,
+      fileSize: fileSize ?? this.fileSize,
+      description: description ?? this.description,
+    );
+  }
+
+  String get typeLabel {
+    switch (type) {
+      case MediaType.image:
+        return '图片';
+      case MediaType.video:
+        return '视频';
+      case MediaType.audio:
+        return '音频';
+      case MediaType.file:
+        return '文件';
+    }
+  }
+
+  IconData get typeIcon {
+    switch (type) {
+      case MediaType.image:
+        return Icons.image;
+      case MediaType.video:
+        return Icons.videocam;
+      case MediaType.audio:
+        return Icons.audiotrack;
+      case MediaType.file:
+        return Icons.insert_drive_file;
+    }
+  }
+}
 
 class _TaskCenterData extends ChangeNotifier {
   String sourceText = '';
@@ -16,6 +83,7 @@ class _TaskCenterData extends ChangeNotifier {
   List<String> contactIds = [];
   List<String> days = ['7天'];
   int priority = 3;
+  List<MediaAttachment> attachments = [];
 
   void updateSource(String v) {
     sourceText = v;
@@ -42,9 +110,49 @@ class _TaskCenterData extends ChangeNotifier {
     notifyListeners();
   }
 
+  void addAttachment(MediaAttachment att) {
+    attachments = [...attachments, att];
+    notifyListeners();
+  }
+
+  void removeAttachment(String id) {
+    attachments = attachments.where((a) => a.id != id).toList();
+    notifyListeners();
+  }
+
+  void updateAttachmentDescription(String id, String desc) {
+    attachments = attachments.map((a) {
+      if (a.id == id) return a.copyWith(description: desc);
+      return a;
+    }).toList();
+    notifyListeners();
+  }
+
   String getDaysText() {
     if (days.isEmpty) return '一周';
     return days.join('、');
+  }
+
+  List<MediaAttachment> getImages =>
+      attachments.where((a) => a.type == MediaType.image).toList();
+  List<MediaAttachment> getVideos =>
+      attachments.where((a) => a.type == MediaType.video).toList();
+  List<MediaAttachment> getAudios =>
+      attachments.where((a) => a.type == MediaType.audio).toList();
+  List<MediaAttachment> getFiles =>
+      attachments.where((a) => a.type == MediaType.file).toList();
+
+  List<String> getAttachmentDescriptions() {
+    final result = <String>[];
+    for (final att in attachments) {
+      final desc = att.description?.trim();
+      if (desc != null && desc.isNotEmpty) {
+        result.add('${att.typeLabel}: $desc');
+      } else {
+        result.add('${att.typeLabel}: ${att.fileName}');
+      }
+    }
+    return result;
   }
 }
 
@@ -84,7 +192,7 @@ class _AiTaskCenterPageState extends State<AiTaskCenterPage>
           bottom: TabBar(
             controller: _tabController,
             tabs: const [
-              Tab(text: '1. 生成素材'),
+              Tab(text: '1. 素材输入'),
               Tab(text: '2. 导出PDF'),
               Tab(text: '3. 粘贴结果'),
             ],
@@ -114,6 +222,8 @@ class _MaterialTab extends StatefulWidget {
 class _MaterialTabState extends State<_MaterialTab> {
   late final TextEditingController _sourceController;
   late final TextEditingController _instructionController;
+  final _imagePicker = ImagePicker();
+  bool _isPicking = false;
 
   @override
   void initState() {
@@ -130,6 +240,124 @@ class _MaterialTabState extends State<_MaterialTab> {
     super.dispose();
   }
 
+  Future<void> _pickImages() async {
+    if (_isPicking) return;
+    setState(() => _isPicking = true);
+    try {
+      final files = await _imagePicker.pickMultiImage();
+      if (files == null || files.isEmpty) return;
+      final data = context.read<_TaskCenterData>();
+      for (final file in files) {
+        final bytes = await file.readAsBytes();
+        final att = MediaAttachment(
+          id: const Uuid().v4(),
+          type: MediaType.image,
+          filePath: file.path,
+          fileName: file.name,
+          fileSize: bytes.length,
+          description: '',
+        );
+        data.addAttachment(att);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择图片失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    if (_isPicking) return;
+    setState(() => _isPicking = true);
+    try {
+      final file = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      final data = context.read<_TaskCenterData>();
+      final att = MediaAttachment(
+        id: const Uuid().v4(),
+        type: MediaType.video,
+        filePath: file.path,
+        fileName: file.name,
+        fileSize: bytes.length,
+        description: '',
+      );
+      data.addAttachment(att);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择视频失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  Future<void> _pickAudio() async {
+    if (_isPicking) return;
+    setState(() => _isPicking = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(type: FileType.audio);
+      if (result == null || result.files.isEmpty) return;
+      final file = result.files.first;
+      final data = context.read<_TaskCenterData>();
+      final att = MediaAttachment(
+        id: const Uuid().v4(),
+        type: MediaType.audio,
+        filePath: file.path!,
+        fileName: file.name,
+        fileSize: file.size ?? 0,
+        description: '',
+      );
+      data.addAttachment(att);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择音频失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
+  Future<void> _pickFile() async {
+    if (_isPicking) return;
+    setState(() => _isPicking = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.any,
+        allowMultiple: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+      final data = context.read<_TaskCenterData>();
+      for (final file in result.files) {
+        final att = MediaAttachment(
+          id: const Uuid().v4(),
+          type: MediaType.file,
+          filePath: file.path!,
+          fileName: file.name,
+          fileSize: file.size ?? 0,
+          description: '',
+        );
+        data.addAttachment(att);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('选择文件失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isPicking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = context.watch<_TaskCenterData>();
@@ -140,7 +368,7 @@ class _MaterialTabState extends State<_MaterialTab> {
       children: [
         _StepCard(
           step: 1,
-          title: '添加素材',
+          title: '文字素材',
           subtitle: '描述最近发生的事情、心情、活动等',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,6 +396,78 @@ class _MaterialTabState extends State<_MaterialTab> {
         const SizedBox(height: 16),
         _StepCard(
           step: 2,
+          title: '多媒体素材',
+          subtitle: '添加图片、视频、音频、文档等素材',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _MediaAddButton(
+                      icon: Icons.image,
+                      label: '图片',
+                      color: Colors.blue,
+                      onTap: _pickImages,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _MediaAddButton(
+                      icon: Icons.videocam,
+                      label: '视频',
+                      color: Colors.red,
+                      onTap: _pickVideo,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _MediaAddButton(
+                      icon: Icons.audiotrack,
+                      label: '音频',
+                      color: Colors.green,
+                      onTap: _pickAudio,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _MediaAddButton(
+                      icon: Icons.insert_drive_file,
+                      label: '文件',
+                      color: Colors.orange,
+                      onTap: _pickFile,
+                    ),
+                  ),
+                ],
+              ),
+              if (_isPicking) ...[
+                const SizedBox(height: 12),
+                const LinearProgressIndicator(),
+              ],
+              if (data.attachments.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  '已添加素材 (${data.attachments.length})',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                ...data.attachments.map((att) => _MediaItemTile(
+                      attachment: att,
+                      onRemove: () => data.removeAttachment(att.id),
+                      onUpdateDesc: (desc) =>
+                          data.updateAttachmentDescription(att.id, desc),
+                    )),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _StepCard(
+          step: 3,
           title: '选择关联联系人',
           subtitle: '选择哪些联系人参与此次任务生成',
           child: Column(
@@ -231,7 +531,7 @@ class _MaterialTabState extends State<_MaterialTab> {
         ),
         const SizedBox(height: 16),
         _StepCard(
-          step: 3,
+          step: 4,
           title: '设置生成范围',
           subtitle: '选择生成多少天的任务',
           child: Column(
@@ -267,7 +567,7 @@ class _MaterialTabState extends State<_MaterialTab> {
         ),
         const SizedBox(height: 16),
         _StepCard(
-          step: 4,
+          step: 5,
           title: '自定义指令（可选）',
           subtitle: '添加额外的要求或约束',
           child: TextField(
@@ -315,6 +615,245 @@ class _MaterialTabState extends State<_MaterialTab> {
   }
 }
 
+class _MediaAddButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MediaAddButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 20, color: color),
+      label: Text(label, style: TextStyle(color: color)),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        side: BorderSide(color: color.withOpacity(0.5)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+}
+
+class _MediaItemTile extends StatefulWidget {
+  final MediaAttachment attachment;
+  final VoidCallback onRemove;
+  final Function(String) onUpdateDesc;
+
+  const _MediaItemTile({
+    required this.attachment,
+    required this.onRemove,
+    required this.onUpdateDesc,
+  });
+
+  @override
+  State<_MediaItemTile> createState() => _MediaItemTileState();
+}
+
+class _MediaItemTileState extends State<_MediaItemTile> {
+  late final TextEditingController _descController;
+  bool _isEditingDesc = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _descController = TextEditingController(text: widget.attachment.description ?? '');
+  }
+
+  @override
+  void dispose() {
+    _descController.dispose();
+    super.dispose();
+  }
+
+  String _formatSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final att = widget.attachment;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                _buildThumbnail(att),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getTypeColor(att.type).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              att.typeLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: _getTypeColor(att.type),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              att.fileName,
+                              style: const TextStyle(fontSize: 13),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _formatSize(att.fileSize),
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 18, color: Colors.grey),
+                  onPressed: widget.onRemove,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            if (_isEditingDesc)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _descController,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: '添加描述（例如：这是上周聚会的合照）',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      style: const TextStyle(fontSize: 12),
+                      onSubmitted: (v) {
+                        widget.onUpdateDesc(v);
+                        setState(() => _isEditingDesc = false);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.check, size: 18),
+                    onPressed: () {
+                      widget.onUpdateDesc(_descController.text);
+                      setState(() => _isEditingDesc = false);
+                    },
+                  ),
+                ],
+              )
+            )
+              else
+              GestureDetector(
+                onTap: () => setState(() => _isEditingDesc = true),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    att.description != null && att.description!.isNotEmpty
+                        ? att.description!
+                        : '点击添加描述（可选）',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: att.description != null && att.description!.isNotEmpty
+                          ? Colors.black87
+                          : Colors.grey.shade500,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumbnail(MediaAttachment att) {
+    if (att.type == MediaType.image && File(att.filePath).existsSync()) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(6),
+        child: Image.file(
+          File(att.filePath),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 48,
+            height: 48,
+            color: Colors.blue.shade100,
+            child: Icon(Icons.image, size: 24, color: Colors.blue.shade400),
+          ),
+        ),
+      );
+    }
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: _getTypeColor(att.type).withOpacity(0.2),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Icon(att.typeIcon, size: 24, color: _getTypeColor(att.type)),
+    );
+  }
+
+  Color _getTypeColor(MediaType type) {
+    switch (type) {
+      case MediaType.image:
+        return Colors.blue;
+      case MediaType.video:
+        return Colors.red;
+      case MediaType.audio:
+        return Colors.green;
+      case MediaType.file:
+        return Colors.orange;
+    }
+  }
+}
+
 class _PromptPreviewCard extends StatelessWidget {
   final _TaskCenterData data;
   const _PromptPreviewCard({required this.data});
@@ -325,6 +864,13 @@ class _PromptPreviewCard extends StatelessWidget {
     buffer.writeln('');
     buffer.writeln('## 素材内容');
     buffer.writeln(data.sourceText.isEmpty ? '（暂无素材）' : data.sourceText);
+    if (data.attachments.isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('## 附加素材');
+      for (final desc in data.getAttachmentDescriptions()) {
+        buffer.writeln('• $desc');
+      }
+    }
     buffer.writeln('');
     buffer.writeln('## 输出要求');
     buffer.writeln('请为每位联系人生成具体可执行的社交任务，用JSON格式返回：');
@@ -424,6 +970,13 @@ class _ExportTabState extends State<_ExportTab> {
     buffer.writeln('');
     buffer.writeln('## 素材内容');
     buffer.writeln(data.sourceText.isEmpty ? '（暂无素材）' : data.sourceText);
+    if (data.attachments.isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('## 附加素材（已通过PDF附加）');
+      for (final desc in data.getAttachmentDescriptions()) {
+        buffer.writeln('• $desc');
+      }
+    }
     buffer.writeln('');
     buffer.writeln('## 目标联系人');
     buffer.writeln(contactsInfo);
@@ -453,6 +1006,24 @@ class _ExportTabState extends State<_ExportTab> {
     return buffer.toString();
   }
 
+  String _getAiExecutionPrompt() {
+    final data = context.read<_TaskCenterData>();
+    final buffer = StringBuffer();
+    buffer.writeln('【复制以下内容，发送给AI】');
+    buffer.writeln('');
+    buffer.writeln('请按照我发送的PDF文档要求执行任务。');
+    buffer.writeln('');
+    buffer.writeln('具体要求：');
+    buffer.writeln('1. 阅读PDF文档中的所有素材和指令');
+    buffer.writeln('2. 分析每位联系人的特点和关系阶段');
+    buffer.writeln('3. 为每位联系人生成${data.getDaysText()}内的社交任务建议');
+    buffer.writeln('4. 严格按照PDF中的JSON格式返回结果');
+    buffer.writeln('5. 每个任务包含：联系人姓名、任务标题、详细描述、任务类型、优先级(1-5)、建议执行天数和时间');
+    buffer.writeln('');
+    buffer.writeln('请确保输出是完整的JSON格式，方便后续解析。');
+    return buffer.toString();
+  }
+
   Future<void> _exportAndShare() async {
     setState(() => _isExporting = true);
     try {
@@ -465,12 +1036,14 @@ class _ExportTabState extends State<_ExportTab> {
           .toList();
 
       final prompt = _buildPrompt(data, contactProvider);
+      final attachments = data.getAttachmentDescriptions();
 
       final file = await PdfExporter.exportExternalAIPdf(
         title: '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
         prompt: prompt,
         contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
         context: data.sourceText,
+        attachments: attachments.isNotEmpty ? attachments : null,
       );
 
       setState(() => _pdfPath = file.path);
@@ -493,11 +1066,22 @@ class _ExportTabState extends State<_ExportTab> {
     }
   }
 
+  Future<void> _copyExecutionPrompt() async {
+    final prompt = _getAiExecutionPrompt();
+    await Clipboard.setData(ClipboardData(text: prompt));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('提示词已复制到剪贴板')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = context.watch<_TaskCenterData>();
     final contactProvider = context.watch<ContactProvider>();
     final prompt = _buildPrompt(data, contactProvider);
+    final executionPrompt = _getAiExecutionPrompt();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -533,7 +1117,7 @@ class _ExportTabState extends State<_ExportTab> {
                     children: [
                       Expanded(
                         child: Text(
-                          '已选 ${data.contactIds.length} 位联系人 · ${data.getDaysText()}周期',
+                          '已选 ${data.contactIds.length} 位联系人 · ${data.getDaysText()}周期 · ${data.attachments.length} 个素材',
                           style: const TextStyle(fontSize: 13),
                         ),
                       ),
@@ -555,8 +1139,13 @@ class _ExportTabState extends State<_ExportTab> {
         ),
         const SizedBox(height: 16),
         _ExportCard(
-          title: '📋 AI提示词内容',
+          title: '📋 AI提示词内容（将写入PDF）',
           content: prompt,
+        ),
+        const SizedBox(height: 16),
+        _AiExecutionPromptCard(
+          prompt: executionPrompt,
+          onCopy: _copyExecutionPrompt,
         ),
         const SizedBox(height: 16),
         Row(
@@ -619,6 +1208,85 @@ class _ExportTabState extends State<_ExportTab> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _AiExecutionPromptCard extends StatelessWidget {
+  final String prompt;
+  final VoidCallback onCopy;
+
+  const _AiExecutionPromptCard({
+    required this.prompt,
+    required this.onCopy,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: const Color(0xFFFF9800).withOpacity(0.08),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.auto_awesome, color: Color(0xFFFF9800)),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    '🎯 第三方AI执行指令（复制发送给AI）',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Color(0xFFFF9800),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: onCopy,
+                  tooltip: '复制提示词',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: SingleChildScrollView(
+                child: Text(
+                  prompt,
+                  style: const TextStyle(fontSize: 12, height: 1.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: onCopy,
+                    icon: const Icon(Icons.copy, size: 18),
+                    label: const Text('一键复制'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF9800),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(36),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -693,7 +1361,7 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     try {
       final jsonMatch = RegExp(r'\{[\s\S]*"tasks"[\s\S]*\}').firstMatch(aiResponse);
       if (jsonMatch != null) {
-        String jsonStr = jsonMatch.group(0)!;
+        String jsonStr = jsonMatch.group(0) ?? '';
         jsonStr = jsonStr
             .replaceAll('```json', '')
             .replaceAll('```', '')
@@ -703,7 +1371,7 @@ class _PasteResultTabState extends State<_PasteResultTab> {
             RegExp(r'"tasks"\s*:\s*(\[[\s\S]*\])').firstMatch(jsonStr);
         if (tasksMatch != null) {
           try {
-            final listStr = tasksMatch.group(1)!;
+            final listStr = tasksMatch.group(1) ?? '[]';
             taskDataList = _tryParseJsonArray(listStr);
           } catch (_) {}
         }
@@ -716,7 +1384,10 @@ class _PasteResultTabState extends State<_PasteResultTab> {
                 .allMatches(jsonStr);
             for (final match in allTasks) {
               try {
-                taskDataList.add(_parseSingleTaskJson(match.group(0)!));
+                final taskJson = match.group(0) ?? '';
+                if (taskJson.isNotEmpty) {
+                  taskDataList.add(_parseSingleTaskJson(taskJson));
+                }
               } catch (_) {}
             }
           } catch (_) {}
@@ -729,15 +1400,15 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     }
 
     final tasks = <SocialTask>[];
-    for (final data in taskDataList) {
-      final contactName = data['contact_name'] as String? ?? '';
+    for (final taskData in taskDataList) {
+      final contactName = taskData['contact_name'] as String? ?? '';
       final contact = contactName.isNotEmpty
           ? contactProvider.contacts
               .where((c) => c.name == contactName)
               .firstOrNull
           : null;
 
-      final typeStr = (data['type'] as String?)?.toLowerCase() ?? 'other';
+      final typeStr = (taskData['type'] as String?)?.toLowerCase() ?? 'other';
       TaskType type;
       switch (typeStr) {
         case 'sendmessage':
@@ -763,9 +1434,9 @@ class _PasteResultTabState extends State<_PasteResultTab> {
           type = TaskType.other;
       }
 
-      final priority = (data['priority'] as int?)?.clamp(1, 5) ?? 3;
-      final offsetDays = (data['scheduled_offset_days'] as int?) ?? 1;
-      final hour = (data['scheduled_hour'] as int?)?.clamp(8, 21) ?? 10;
+      final priority = (taskData['priority'] as int?)?.clamp(1, 5) ?? 3;
+      final offsetDays = (taskData['scheduled_offset_days'] as int?) ?? 1;
+      final hour = (taskData['scheduled_hour'] as int?)?.clamp(8, 21) ?? 10;
       final scheduledAt = DateTime(
         now.year,
         now.month,
@@ -779,8 +1450,8 @@ class _PasteResultTabState extends State<_PasteResultTab> {
         contactId: contact?.id ?? '',
         contactName:
             contact?.name ?? (contactName.isNotEmpty ? contactName : '全局'),
-        title: data['title'] as String? ?? '社交任务',
-        description: data['description'] as String? ?? '',
+        title: taskData['title'] as String? ?? '社交任务',
+        description: taskData['description'] as String? ?? '',
         type: type,
         status: TaskStatus.pending,
         scheduledAt: scheduledAt,
@@ -823,8 +1494,8 @@ class _PasteResultTabState extends State<_PasteResultTab> {
               r'"([^"]+)"\s*:\s*("[^"]*"|[\d]+|\[[^\]]*\]|\{[^}]*\})')
           .allMatches(json);
       for (final pair in pairs) {
-        final key = pair.group(1)!;
-        var value = pair.group(2)!;
+        final key = pair.group(1) ?? '';
+        var value = pair.group(2) ?? '';
         if (value.startsWith('"')) {
           value = value.substring(1, value.length - 1);
         } else if (value.startsWith('[')) {
@@ -832,7 +1503,9 @@ class _PasteResultTabState extends State<_PasteResultTab> {
         } else if (value.startsWith('{')) {
           value = '';
         }
-        result[key] = value;
+        if (key.isNotEmpty) {
+          result[key] = value;
+        }
       }
     } catch (_) {}
     return result;
@@ -863,15 +1536,15 @@ class _PasteResultTabState extends State<_PasteResultTab> {
           current = {};
         }
         inTask = true;
-        current['title'] = titleMatch.group(1)!.trim();
+        current['title'] = titleMatch.group(1)?.trim() ?? '';
       } else if (descMatch != null) {
-        current['description'] = descMatch.group(1)!.trim();
+        current['description'] = descMatch.group(1)?.trim() ?? '';
       } else if (contactMatch != null) {
-        current['contact_name'] = contactMatch.group(1)!.trim();
+        current['contact_name'] = contactMatch.group(1)?.trim() ?? '';
       } else if (typeMatch != null) {
-        current['type'] = typeMatch.group(1)!.trim().toLowerCase();
+        current['type'] = typeMatch.group(1)?.trim().toLowerCase() ?? '';
       } else if (priorityMatch != null) {
-        current['priority'] = int.tryParse(priorityMatch.group(1)!) ?? 3;
+        current['priority'] = int.tryParse(priorityMatch.group(1) ?? '3') ?? 3;
       }
     }
 
@@ -1096,8 +1769,9 @@ class _ExportCard extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.copy, size: 18),
                   onPressed: () {
+                    Clipboard.setData(ClipboardData(text: content));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('已复制')),
+                      const SnackBar(content: Text('已复制到剪贴板')),
                     );
                   },
                 ),
@@ -1109,14 +1783,11 @@ class _ExportCard extends StatelessWidget {
                 color: Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(8),
               ),
-              constraints: const BoxConstraints(maxHeight: 300),
+              constraints: const BoxConstraints(maxHeight: 250),
               child: SingleChildScrollView(
                 child: Text(
                   content,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    height: 1.5,
-                  ),
+                  style: const TextStyle(fontSize: 12),
                 ),
               ),
             ),
