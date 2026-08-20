@@ -77,6 +77,42 @@ class MediaAttachment {
   }
 }
 
+class TaskHistory {
+  final String id;
+  final String sourceText;
+  final List<String> contactNames;
+  final int taskCount;
+  final DateTime createdAt;
+  final String prompt;
+
+  TaskHistory({
+    required this.id,
+    required this.sourceText,
+    required this.contactNames,
+    required this.taskCount,
+    required this.createdAt,
+    required this.prompt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'sourceText': sourceText,
+    'contactNames': contactNames,
+    'taskCount': taskCount,
+    'createdAt': createdAt.toIso8601String(),
+    'prompt': prompt,
+  };
+
+  factory TaskHistory.fromJson(Map<String, dynamic> json) => TaskHistory(
+    id: json['id'] as String,
+    sourceText: json['sourceText'] as String,
+    contactNames: List<String>.from(json['contactNames'] as List),
+    taskCount: json['taskCount'] as int,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+    prompt: json['prompt'] as String,
+  );
+}
+
 class _TaskCenterData extends ChangeNotifier {
   String sourceText = '';
   String instructionText = '';
@@ -84,6 +120,7 @@ class _TaskCenterData extends ChangeNotifier {
   List<String> days = ['7天'];
   int priority = 3;
   List<MediaAttachment> attachments = [];
+  List<TaskHistory> history = [];
 
   void updateSource(String v) {
     sourceText = v;
@@ -125,6 +162,21 @@ class _TaskCenterData extends ChangeNotifier {
       if (a.id == id) return a.copyWith(description: desc);
       return a;
     }).toList();
+    notifyListeners();
+  }
+
+  void addHistory(TaskHistory h) {
+    history = [h, ...history].take(20).toList();
+    notifyListeners();
+  }
+
+  void clearHistory() {
+    history = [];
+    notifyListeners();
+  }
+
+  void removeHistory(String id) {
+    history = history.where((h) => h.id != id).toList();
     notifyListeners();
   }
 
@@ -171,7 +223,7 @@ class _AiTaskCenterPageState extends State<AiTaskCenterPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _data = _TaskCenterData();
   }
 
@@ -195,6 +247,7 @@ class _AiTaskCenterPageState extends State<AiTaskCenterPage>
               Tab(text: '1. 素材输入'),
               Tab(text: '2. 导出PDF'),
               Tab(text: '3. 粘贴结果'),
+              Tab(text: '📜 历史记录'),
             ],
           ),
         ),
@@ -204,6 +257,7 @@ class _AiTaskCenterPageState extends State<AiTaskCenterPage>
             _MaterialTab(onNext: () => _tabController.animateTo(1)),
             _ExportTab(onNext: () => _tabController.animateTo(2)),
             const _PasteResultTab(),
+            const _HistoryTab(),
           ],
         ),
       ),
@@ -1791,6 +1845,228 @@ class _ExportCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistoryTab extends StatelessWidget {
+  const _HistoryTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final data = context.watch<_TaskCenterData>();
+    final history = data.history;
+
+    if (history.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.history,
+                  size: 48,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                '暂无历史记录',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '完成任务生成后，历史记录会显示在这里',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '历史记录 (${history.length})',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () {
+                  data.clearHistory();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已清空历史记录')),
+                  );
+                },
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('清空'),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: history.length,
+            itemBuilder: (context, index) {
+              final item = history[index];
+              return _HistoryItem(
+                history: item,
+                onCopy: () {
+                  Clipboard.setData(ClipboardData(text: item.prompt));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('提示词已复制')),
+                  );
+                },
+                onDelete: () => data.removeHistory(item.id),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _HistoryItem extends StatelessWidget {
+  final TaskHistory history;
+  final VoidCallback onCopy;
+  final VoidCallback onDelete;
+
+  const _HistoryItem({
+    required this.history,
+    required this.onCopy,
+    required this.onDelete,
+  });
+
+  String _formatTime(DateTime time) {
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    if (difference.inMinutes < 1) return '刚刚';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}分钟前';
+    if (difference.inHours < 24) return '${difference.inHours}小时前';
+    if (difference.inDays < 7) return '${difference.inDays}天前';
+    return DateFormat('MM月dd日 HH:mm').format(time);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.auto_awesome,
+                    size: 20,
+                    color: Color(0xFF6366F1),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '生成 ${history.taskCount} 个任务',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        _formatTime(history.createdAt),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy, size: 18),
+                  onPressed: onCopy,
+                  tooltip: '复制提示词',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+                  onPressed: onDelete,
+                  tooltip: '删除',
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (history.sourceText.isNotEmpty)
+              Text(
+                history.sourceText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            if (history.contactNames.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: history.contactNames.take(5).map((name) {
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF6366F1),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
           ],
         ),
       ),

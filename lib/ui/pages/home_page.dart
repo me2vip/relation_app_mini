@@ -331,51 +331,127 @@ class _DashboardView extends StatelessWidget {
   }
 
   Widget _buildStatsCards(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Consumer<ContactProvider>(
-            builder: (context, provider, _) {
-              return _StatCard(
-                icon: Icons.people,
-                iconColor: const Color(0xFF6366F1),
-                title: '联系人',
-                value: '${provider.contacts.length}',
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Consumer<TaskProvider>(
-            builder: (context, provider, _) {
-              return _StatCard(
-                icon: Icons.task_alt,
-                iconColor: Colors.green,
-                title: '待办任务',
-                value: '${provider.pendingTasks.length}',
-              );
-            },
-          ),
-        ),
-        const SizedBox(width: 15),
-        Expanded(
-          child: Consumer<ContactProvider>(
-            builder: (context, provider, _) {
-              final importantCount = provider.contacts
-                  .where((c) => c.level == ContactLevel.important ||
-                      c.level == ContactLevel.core)
-                  .length;
-              return _StatCard(
-                icon: Icons.star,
-                iconColor: Colors.orange,
-                title: '重要',
-                value: '$importantCount',
-              );
-            },
-          ),
-        ),
-      ],
+    return Consumer<TaskProvider>(
+      builder: (context, taskProvider, _) {
+        final totalTasks = taskProvider.tasks.length;
+        final completedTasks = taskProvider.completedTasks.length;
+        final pendingTasks = taskProvider.pendingTasks.length;
+        final completionRate = totalTasks > 0 
+            ? (completedTasks / totalTasks * 100).round() 
+            : 0;
+        
+        final now = DateTime.now();
+        final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+        final endOfWeek = startOfWeek.add(const Duration(days: 7));
+        final thisWeekTasks = taskProvider.tasks.where((t) {
+          return t.scheduledAt.isAfter(startOfWeek) && 
+                 t.scheduledAt.isBefore(endOfWeek);
+        }).length;
+
+        return Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Consumer<ContactProvider>(
+                    builder: (context, provider, _) {
+                      return _StatCard(
+                        icon: Icons.people,
+                        iconColor: const Color(0xFF6366F1),
+                        title: '联系人',
+                        value: '${provider.contacts.length}',
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: _StatCard(
+                    icon: Icons.task_alt,
+                    iconColor: Colors.green,
+                    title: '待办任务',
+                    value: '$pendingTasks',
+                  ),
+                ),
+                const SizedBox(width: 15),
+                Expanded(
+                  child: _StatCard(
+                    icon: Icons.check_circle,
+                    iconColor: Colors.blue,
+                    title: '完成率',
+                    value: '$completionRate%',
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        '📊 本周任务概览',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '$thisWeekTasks 条',
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: completionRate / 100,
+                      backgroundColor: Colors.white.withOpacity(0.2),
+                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                      minHeight: 8,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '已完成 $completedTasks / $totalTasks',
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      Text(
+                        completionRate >= 80 ? '🔥 很棒！' : 
+                        completionRate >= 50 ? '💪 加油！' : 
+                        '📈 努力中',
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 
