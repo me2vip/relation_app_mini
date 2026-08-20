@@ -30,7 +30,7 @@ class PdfExporter {
         final file = File(path);
         if (await file.exists()) {
           final bytes = await file.readAsBytes();
-          final font = pw.Font.ttf(bytes);
+          final font = pw.Font.ttf(bytes.buffer.asByteData());
           _cachedChineseFont = font;
           return font;
         }
@@ -136,7 +136,7 @@ class PdfExporter {
       widgets.add(
         pw.Container(
           padding: const pw.EdgeInsets.all(12),
-          decoration: const pw.BoxDecoration(
+          decoration: pw.BoxDecoration(
             border: pw.Border(left: pw.BorderSide(color: PdfColors.indigo400, width: 3)),
             color: PdfColors.indigo50,
           ),
@@ -174,7 +174,7 @@ class PdfExporter {
     widgets.add(
       pw.Container(
         padding: const pw.EdgeInsets.all(12),
-        decoration: const pw.BoxDecoration(
+        decoration: pw.BoxDecoration(
           color: PdfColors.amber50,
         ),
         child: pw.Text(
@@ -189,7 +189,7 @@ class PdfExporter {
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
         header: (pageContext) {
-          if (pageContext.pageNumber == 1) return const pw.SizedBox.shrink();
+          if (pageContext.pageNumber == 1) return pw.SizedBox.shrink();
           return pw.Container(
             alignment: pw.Alignment.centerRight,
             margin: const pw.EdgeInsets.only(bottom: 10),

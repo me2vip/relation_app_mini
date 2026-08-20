@@ -713,7 +713,7 @@ class _PasteResultTabState extends State<_PasteResultTab> {
             final allTasks = RegExp(
                     r'\{[^{}]*"title"[^{}]*"type"[^{}]*"priority"[^{}]*\}',
                     multiLine: true)
-                .all(jsonStr);
+                .allMatches(jsonStr);
             for (final match in allTasks) {
               try {
                 taskDataList.add(_parseSingleTaskJson(match.group(0)!));
@@ -821,7 +821,7 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     try {
       final pairs = RegExp(
               r'"([^"]+)"\s*:\s*("[^"]*"|[\d]+|\[[^\]]*\]|\{[^}]*\})')
-          .all(json);
+          .allMatches(json);
       for (final pair in pairs) {
         final key = pair.group(1)!;
         var value = pair.group(2)!;
