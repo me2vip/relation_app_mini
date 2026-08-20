@@ -23,6 +23,7 @@ import 'ui/pages/temp_material_page.dart';
 import 'ui/pages/dynamic_post_page.dart';
 import 'ui/pages/channel_manage_page.dart';
 import 'ui/pages/ai_model_manage_page.dart';
+import 'ui/pages/ai_task_center_page.dart';
 import 'services/notification_service.dart';
 
 // GlobalKey 用于访问 MyApp 状态
@@ -148,6 +149,7 @@ class _MyAppState extends State<MyApp> {
           '/dynamic-post': (context) => const DynamicPostPage(),
           '/channels': (context) => const ChannelManagePage(),
           '/ai-models': (context) => const AIModelManagePage(),
+          '/ai-task-center': (context) => const AiTaskCenterPage(),
         },
       ),
     );

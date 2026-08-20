@@ -12,6 +12,7 @@ import '../widgets/contact_card.dart';
 import '../widgets/task_card.dart';
 import '../../core/widgets/update_dialog.dart';
 import 'settings_page.dart';
+import 'ai_task_center_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -262,6 +263,8 @@ class _DashboardView extends StatelessWidget {
                   ),
                   const SizedBox(height: 30),
                   _buildStatsCards(context),
+                  const SizedBox(height: 20),
+                  _buildAiTaskCenterCard(context),
                   const SizedBox(height: 30),
                   const _RelationshipFeedSection(),
                   const SizedBox(height: 30),
@@ -373,6 +376,77 @@ class _DashboardView extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildAiTaskCenterCard(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, '/ai-task-center'),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF6366F1).withOpacity(0.3),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'AI任务中心',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '通过AI一键生成社交任务',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(
+                Icons.arrow_forward_ios,
+                color: Colors.white,
+                size: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
