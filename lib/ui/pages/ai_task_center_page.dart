@@ -185,13 +185,13 @@ class _TaskCenterData extends ChangeNotifier {
     return days.join('、');
   }
 
-  List<MediaAttachment> getImages =>
+  List<MediaAttachment> get getImages =>
       attachments.where((a) => a.type == MediaType.image).toList();
-  List<MediaAttachment> getVideos =>
+  List<MediaAttachment> get getVideos =>
       attachments.where((a) => a.type == MediaType.video).toList();
-  List<MediaAttachment> getAudios =>
+  List<MediaAttachment> get getAudios =>
       attachments.where((a) => a.type == MediaType.audio).toList();
-  List<MediaAttachment> getFiles =>
+  List<MediaAttachment> get getFiles =>
       attachments.where((a) => a.type == MediaType.file).toList();
 
   List<String> getAttachmentDescriptions() {
@@ -504,9 +504,9 @@ class _MaterialTabState extends State<_MaterialTab> {
               ],
               if (data.attachments.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   '已添加素材 (${data.attachments.length})',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 ),
                 const SizedBox(height: 8),
                 ...data.attachments.map((att) => _MediaItemTile(
@@ -833,8 +833,7 @@ class _MediaItemTileState extends State<_MediaItemTile> {
                   ),
                 ],
               )
-            )
-              else
+            else
               GestureDetector(
                 onTap: () => setState(() => _isEditingDesc = true),
                 child: Container(

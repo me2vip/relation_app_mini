@@ -45,7 +45,7 @@ class PdfExporter {
     pw.Font? font,
     double? fontSize,
     pw.FontWeight? fontWeight,
-    pw.Color? color,
+    PdfColor? color,
     double? height,
     pw.FontStyle? fontStyle,
     pw.TextDecoration? decoration,
