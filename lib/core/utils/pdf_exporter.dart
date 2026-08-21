@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_pdf_export/flutter_pdf_export.dart';
+import 'package:archive/archive.dart';
 
 class PdfExporter {
   static pw.Font? _chineseFont;
@@ -1036,5 +1037,218 @@ class PdfExporter {
     } catch (e) {
       return null;
     }
+  }
+
+  static Future<File> exportZipWithResources({
+    required String title,
+    required String prompt,
+    String? contactName,
+    String? context,
+    List<String>? attachments,
+  }) async {
+    final now = DateTime.now();
+    final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
+    final dir = await getTemporaryDirectory();
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final zipDir = Directory('${dir.path}/社交塔子_${safeTitle}_$timestamp');
+    await zipDir.create(recursive: true);
+
+    final imagesDir = Directory('${zipDir.path}/images');
+    List<String> relativeImagePaths = [];
+
+    if (attachments != null) {
+      var imgIdx = 1;
+      for (final att in attachments) {
+        if (att.startsWith('![') && att.contains('](')) {
+          final match = RegExp(r'!\[([^\]]*)\]\((.+)\)').firstMatch(att);
+          if (match != null) {
+            final srcPath = (match.group(2) ?? '').trim();
+            final alt = match.group(1) ?? '';
+            final srcFile = File(srcPath);
+            if (await srcFile.exists()) {
+              final ext = srcPath.contains('.') ? srcPath.split('.').last : 'jpg';
+              final fileName = 'image_${imgIdx.toString().padLeft(2, '0')}.$ext';
+              final destPath = '${imagesDir.path}/$fileName';
+              await imagesDir.create(recursive: true);
+              await srcFile.copy(destPath);
+              relativeImagePaths.add('images/$fileName');
+              imgIdx++;
+            }
+          }
+        }
+      }
+    }
+
+    final markdown = StringBuffer();
+    markdown.writeln('# $title');
+    markdown.writeln();
+    markdown.writeln('> 生成时间：$dateStr');
+    if (contactName != null && contactName.isNotEmpty) {
+      markdown.writeln('> 联系人：$contactName');
+    }
+    markdown.writeln();
+    markdown.writeln('---');
+    markdown.writeln();
+
+    markdown.writeln('## 使用说明');
+    markdown.writeln();
+    markdown.writeln('1. 将此ZIP文件解压，得到Markdown文档和images文件夹');
+    markdown.writeln('2. 将Markdown内容和图片一起发送给AI（千问、豆包、GPT等）');
+    markdown.writeln('3. 对AI说：请按照此文档的要求执行任务');
+    markdown.writeln('4. 等待AI返回分析结果');
+    markdown.writeln('5. 将AI的回复完整复制回APP');
+    markdown.writeln();
+
+    if (context != null && context.isNotEmpty) {
+      markdown.writeln('## 背景信息 / 素材');
+      markdown.writeln();
+      for (final l in context.split('\n')) {
+        markdown.writeln('> ${l.trimRight()}');
+      }
+      markdown.writeln();
+    }
+
+    markdown.writeln('## AI 任务指令');
+    markdown.writeln();
+    markdown.writeln(prompt);
+    markdown.writeln();
+
+    if (relativeImagePaths.isNotEmpty) {
+      markdown.writeln('## 图片素材');
+      markdown.writeln();
+      for (var i = 0; i < relativeImagePaths.length; i++) {
+        markdown.writeln('![图片${i + 1}](images/image_${(i + 1).toString().padLeft(2, '0')}.jpg)');
+        markdown.writeln();
+      }
+    }
+
+    markdown.writeln('---');
+    markdown.writeln();
+    markdown.writeln('### 重要提示');
+    markdown.writeln();
+    markdown.writeln(
+      '将AI的完整回复（包括思考过程和分析结果）复制回APP，'
+      'APP将自动解析JSON并保存为任务。',
+    );
+
+    final mdFile = File('${zipDir.path}/任务指令.md');
+    await mdFile.writeAsString(markdown.toString());
+
+    final zipFile = File('${dir.path}/社交塔子_${safeTitle}_$timestamp.zip');
+    final encoder = ZipEncoder();
+    final archive = Archive();
+
+    archive.addFile(
+      ArchiveFile('任务指令.md', mdFile.lengthSync(), mdFile.readAsBytesSync()),
+    );
+
+    if (relativeImagePaths.isNotEmpty) {
+      archive.addFile(ArchiveFile('images', 0, []));
+      for (final relPath in relativeImagePaths) {
+        final fullPath = '${zipDir.path}/$relPath';
+        final file = File(fullPath);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          archive.addFile(ArchiveFile(relPath, bytes.length, bytes));
+        }
+      }
+    }
+
+    final zipBytes = encoder.encode(archive);
+    if (zipBytes == null) {
+      throw StateError('ZIP压缩失败');
+    }
+    await zipFile.writeAsBytes(zipBytes);
+
+    return zipFile;
+  }
+
+  static Future<File?> exportImageOnlyPdf({
+    required String title,
+    List<String>? attachments,
+  }) async {
+    if (attachments == null || attachments.isEmpty) return null;
+
+    final imagePaths = <String>[];
+    for (final att in attachments) {
+      if (att.startsWith('![') && att.contains('](')) {
+        final match = RegExp(r'!\[([^\]]*)\]\((.+)\)').firstMatch(att);
+        if (match != null) {
+          final path = (match.group(2) ?? '').trim();
+          if (path.isNotEmpty) imagePaths.add(path);
+        }
+      }
+    }
+
+    if (imagePaths.isEmpty) return null;
+
+    final now = DateTime.now();
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final dir = await getTemporaryDirectory();
+    final outputPath = '${dir.path}/社交塔子_${safeTitle}_图片素材_$timestamp.pdf';
+
+    final pdf = pw.Document();
+    final images = <pw.Widget>[];
+
+    for (var i = 0; i < imagePaths.length; i++) {
+      try {
+        final file = File(imagePaths[i]);
+        if (!await file.exists()) continue;
+        final bytes = await file.readAsBytes();
+        if (bytes.isEmpty) continue;
+        final mem = pw.MemoryImage(bytes);
+        images.add(
+          pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            child: pw.ClipRRect(
+              horizontalRadius: 8,
+              verticalRadius: 8,
+              child: pw.Image(
+                mem,
+                width: 495,
+                fit: pw.BoxFit.contain,
+                alignment: pw.Alignment.center,
+              ),
+            ),
+          ),
+        );
+      } catch (_) {}
+    }
+
+    if (images.isEmpty) return null;
+
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (_) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                title,
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                '图片素材 (${imagePaths.length}张)',
+                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
+              ),
+              pw.SizedBox(height: 16),
+              ...images,
+            ],
+          );
+        },
+      ),
+    );
+
+    final file = File(outputPath);
+    await file.writeAsBytes(await pdf.save());
+    return file;
   }
 }

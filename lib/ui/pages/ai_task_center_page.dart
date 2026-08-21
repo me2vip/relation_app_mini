@@ -1014,9 +1014,33 @@ class _ExportTab extends StatefulWidget {
   State<_ExportTab> createState() => _ExportTabState();
 }
 
+enum ExportMode { zip, imagePdf, fullPdf }
+
 class _ExportTabState extends State<_ExportTab> {
   bool _isExporting = false;
   String? _pdfPath;
+  String? _zipPath;
+  ExportMode _exportMode = ExportMode.fullPdf;
+
+  List<String> _buildAttachmentList(_TaskCenterData data) {
+    final attachments = <String>[...data.getAttachmentDescriptions()];
+    var imageIdx = 1;
+    for (final a in data.attachments) {
+      if (a.type != MediaType.image) continue;
+      final path = a.filePath;
+      if (path.isEmpty) continue;
+      final desc = (a.description?.trim().isNotEmpty == true)
+          ? a.description!.trim()
+          : a.fileName;
+      attachments.add('![图片素材$imageIdx: $desc]($path)');
+      imageIdx++;
+    }
+    return attachments;
+  }
+
+  bool _hasImages(_TaskCenterData data) {
+    return data.attachments.any((a) => a.type == MediaType.image && a.filePath.isNotEmpty);
+  }
 
   String _buildPrompt(_TaskCenterData data, ContactProvider contactProvider) {
     final contacts = data.contactIds
@@ -1095,181 +1119,176 @@ class _ExportTabState extends State<_ExportTab> {
   }
 
   Future<void> _exportAndShare() async {
+    switch (_exportMode) {
+      case ExportMode.zip:
+        await _exportZip();
+        break;
+      case ExportMode.imagePdf:
+        await _exportImagePdf();
+        break;
+      case ExportMode.fullPdf:
+        await _exportFullPdf();
+        break;
+    }
+  }
+
+  Future<void> _exportZip() async {
     setState(() => _isExporting = true);
-    String phase = '初始化';
-    String? usedFallbackLevel;   // 'L2' 或 'L3' 代表用了兜底层级
-    String? fallbackErrorsText;  // L1或L1+L2 的错误（拼接）
     try {
-      phase = '读取Provider与联系人';
       final data = context.read<_TaskCenterData>();
       final contactProvider = context.read<ContactProvider>();
       final contacts = data.contactIds
-          .map((id) =>
-              contactProvider.contacts.where((c) => c.id == id).firstOrNull)
+          .map((id) => contactProvider.contacts.where((c) => c.id == id).firstOrNull)
           .whereType<Contact>()
           .toList();
 
-      phase = '组装Prompt与附件描述';
       final prompt = _buildPrompt(data, contactProvider);
-      final attachments = data.getAttachmentDescriptions();
+      final attachments = _buildAttachmentList(data);
+      final titleStr = '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
 
-      phase = '调用PdfExporter.exportExternalAIPdf生成PDF';
-      File file;
-      String pdfLevel = 'L1';
-      String pdfFallbackReport = '';
-      try {
-        final titleStr = '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
+      final zipFile = await PdfExporter.exportZipWithResources(
+        title: titleStr,
+        prompt: prompt,
+        contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
+        context: data.sourceText,
+        attachments: attachments.isNotEmpty ? attachments : null,
+      );
 
-        // 构建 attachments 列表：
-        // 1) 先加文字版描述（getAttachmentDescriptions）
-        // 2) 再为**图片素材**追加整行 Markdown 图片引用：![图片N描述](本地绝对路径)
-        //    这样 PdfExporter 自实现 Markdown 解析器会把图片嵌入 PDF 页，
-        //    最终 PDF 里直接包含提示词 + 图片，用户无需理解 md 附件概念。
-        final attachments = <String>[...data.getAttachmentDescriptions()];
-        var imageIdx = 1;
-        for (final a in data.attachments) {
-          if (a.type != MediaType.image) continue;
-          final path = a.filePath;
-          if (path.isEmpty) continue;
-          final desc = (a.description?.trim().isNotEmpty == true)
-              ? a.description!.trim()
-              : a.fileName;
-          attachments.add('![图片素材$imageIdx: $desc]($path)');
-          imageIdx++;
-        }
+      setState(() => _zipPath = zipFile.path);
 
-        final result = await PdfExporter.exportExternalAIPdfEx(
-          title: titleStr,
-          prompt: prompt,
-          contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
-          context: data.sourceText,
-          attachments: attachments.isNotEmpty ? attachments : null,
-        );
-        file = result.file;
-        pdfLevel = result.level;
-        pdfFallbackReport = result.fallbackReport;
-        usedFallbackLevel = pdfLevel == 'L1' ? null : pdfLevel;
-        if (pdfFallbackReport.isNotEmpty) {
-          fallbackErrorsText =
-              'PDF最终走层级$pdfLevel；L1/L2失败记录:\n$pdfFallbackReport';
-        }
-      } on StateError catch (pdfErr, pdfSt) {
-        // ignore: avoid_print
-        print('[Pdf导出全部层级失败] ${pdfErr.message}\n$pdfSt');
-        rethrow;
-      } catch (e, st) {
-        // ignore: avoid_print
-        print('[PdfExporter异常非StateError] $e\n$st');
-        rethrow;
-      }
-      phase = '保存PDF路径到状态';
-      final savedPath = file.path;
-      setState(() => _pdfPath = savedPath);
+      await Share.shareXFiles(
+        [XFile(zipFile.path)],
+        subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
+        text: '将此ZIP解压后，把Markdown和图片一起发送给AI即可。',
+      );
 
       if (mounted) {
-        phase = '调用Share.shareXFiles分享';
-        try {
-          final levelHint = (usedFallbackLevel != null)
-              ? '  (PDF采用兼容层级$usedFallbackLevel渲染)'
-              : '';
-          await Share.shareXFiles(
-            [XFile(savedPath)],
-            subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
-            text:
-                '请将此PDF发送给外部AI（千问/豆包/GPT等），让AI按文档要求生成任务建议$levelHint。'
-                'PDF内含提示词及图片素材参考，AI返回完整回复后，将回复全文复制回APP即可自动保存任务。',
-          );
-        } catch (shareErr, shareSt) {
-          final shareReport = '阶段=分享 PDF\n'
-              '异常: $shareErr\n'
-              '堆栈: $shareSt';
-          // ignore: avoid_print
-          print('[PDF分享失败] $shareReport');
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('PDF已保存(${savedPath.split('/').last})，但分享失败: $shareErr'),
-                duration: const Duration(seconds: 6),
-                behavior: SnackBarBehavior.floating,
-                action: SnackBarAction(
-                  label: '复制详情',
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: shareReport));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('分享错误详情已复制到剪贴板'),
-                        duration: Duration(seconds: 2),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                ),
-              ),
-            );
-          }
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ZIP已生成并分享: ${zipFile.path.split('/').last}')),
+        );
       }
-      // 若用了兜底层级（正常路径暂时没法在返回值暴露，这里给个说明）
-      if (usedFallbackLevel != null && fallbackErrorsText != null && mounted) {
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ZIP导出失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportImagePdf() async {
+    setState(() => _isExporting = true);
+    try {
+      final data = context.read<_TaskCenterData>();
+      final hasImages = _hasImages(data);
+
+      if (!hasImages) {
+        final prompt = _getAiExecutionPrompt();
+        await Clipboard.setData(ClipboardData(text: prompt));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('无图片素材，已复制AI提示词到剪贴板'),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
+      final attachments = _buildAttachmentList(data);
+      final titleStr = '社交任务图片素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
+
+      final imgFile = await PdfExporter.exportImageOnlyPdf(
+        title: titleStr,
+        attachments: attachments.isNotEmpty ? attachments : null,
+      );
+
+      if (imgFile != null) {
+        setState(() => _pdfPath = imgFile.path);
+        await Share.shareXFiles(
+          [XFile(imgFile.path)],
+          subject: '社交任务图片素材',
+          text: '图片素材，请发送给AI分析。',
+        );
+      }
+
+      final prompt = _getAiExecutionPrompt();
+      await Clipboard.setData(ClipboardData(text: prompt));
+
+      if (mounted) {
+        final msg = imgFile != null
+            ? '图片PDF已分享，AI提示词已复制到剪贴板'
+            : 'AI提示词已复制到剪贴板';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(msg)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('导出失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Future<void> _exportFullPdf() async {
+    setState(() => _isExporting = true);
+    String phase = '初始化';
+    try {
+      phase = '读取数据';
+      final data = context.read<_TaskCenterData>();
+      final contactProvider = context.read<ContactProvider>();
+      final contacts = data.contactIds
+          .map((id) => contactProvider.contacts.where((c) => c.id == id).firstOrNull)
+          .whereType<Contact>()
+          .toList();
+
+      phase = '生成PDF';
+      final prompt = _buildPrompt(data, contactProvider);
+      final attachments = _buildAttachmentList(data);
+      final titleStr = '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
+
+      final result = await PdfExporter.exportExternalAIPdfEx(
+        title: titleStr,
+        prompt: prompt,
+        contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
+        context: data.sourceText,
+        attachments: attachments.isNotEmpty ? attachments : null,
+      );
+
+      phase = '分享PDF';
+      setState(() => _pdfPath = result.file.path);
+
+      await Share.shareXFiles(
+        [XFile(result.file.path)],
+        subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
+        text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议。AI返回完整回复后，将回复全文复制回APP即可自动保存任务。',
+      );
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('PDF已通过兼容层级($usedFallbackLevel)生成，若内容乱码请反馈'),
-            duration: const Duration(seconds: 5),
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: '复制报告',
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: fallbackErrorsText!));
-              },
-            ),
+            content: Text('PDF已生成(${result.level})并分享'),
+            duration: const Duration(seconds: 4),
           ),
         );
       }
     } catch (e, stackTrace) {
       if (mounted) {
-        final msg = e.toString();
-        // 把报告做得非常详细，复制出来我就能看
         final buf = StringBuffer();
-        buf.writeln('=== 社交塔子 PDF导出崩溃报告 v${DateTime.now().millisecondsSinceEpoch} ===');
         buf.writeln('阶段: $phase');
-        buf.writeln('异常类型: ${e.runtimeType}');
-        buf.writeln('异常信息: $msg');
-        buf.writeln('堆栈:');
-        buf.write(stackTrace.toString());
-        final report = buf.toString();
-        // ignore: avoid_print
-        print(report);
-
-        // SnackBar 内容精简到 500 字内，保证可读性
-        final showMsg = msg.length > 420 ? '${msg.substring(0, 420)}…' : msg;
-        final short = '阶段[$phase]: $showMsg';
-
+        buf.writeln('异常: $e');
+        buf.writeln('堆栈: $stackTrace');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: SizedBox(
-              height: 120,
-              child: SingleChildScrollView(
-                child: Text(
-                  '导出失败: $short\n\n点「复制崩溃报告」粘贴给作者即可定位修复',
-                  style: const TextStyle(fontSize: 12, height: 1.4),
-                ),
-              ),
-            ),
-            duration: const Duration(seconds: 15),
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: '复制崩溃报告',
-              onPressed: () {
-                Clipboard.setData(ClipboardData(text: report));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('完整崩溃报告已复制到剪贴板，直接粘贴反馈即可'),
-                    duration: Duration(seconds: 3),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              },
-            ),
+            content: Text('导出失败: $e'),
+            duration: const Duration(seconds: 10),
           ),
         );
       }
@@ -1294,7 +1313,26 @@ class _ExportTabState extends State<_ExportTab> {
     final contactProvider = context.watch<ContactProvider>();
     final prompt = _buildPrompt(data, contactProvider);
     final executionPrompt = _getAiExecutionPrompt();
+    final hasImages = _hasImages(data);
     final savedPdfPath = _pdfPath;
+    final savedZipPath = _zipPath;
+
+    String modeLabel;
+    IconData modeIcon;
+    switch (_exportMode) {
+      case ExportMode.zip:
+        modeLabel = '导出ZIP并分享';
+        modeIcon = Icons.folder_zip;
+        break;
+      case ExportMode.imagePdf:
+        modeLabel = hasImages ? '导出图片PDF+复制提示词' : '复制AI提示词';
+        modeIcon = hasImages ? Icons.image : Icons.content_copy;
+        break;
+      case ExportMode.fullPdf:
+        modeLabel = '导出PDF并分享';
+        modeIcon = Icons.picture_as_pdf;
+        break;
+    }
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -1312,7 +1350,7 @@ class _ExportTabState extends State<_ExportTab> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        '点击下方按钮导出PDF，将PDF发给外部AI（千问、豆包等），然后将AI回复粘贴回APP',
+                        '选择导出方式，将素材发送给外部AI分析',
                         style: TextStyle(fontSize: 13),
                       ),
                     ),
@@ -1351,15 +1389,60 @@ class _ExportTabState extends State<_ExportTab> {
           ),
         ),
         const SizedBox(height: 16),
-        _ExportCard(
-          title: '📋 AI提示词内容（将写入PDF）',
-          content: prompt,
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('选择导出方式', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                _buildModeTile(
+                  icon: Icons.folder_zip,
+                  title: '方式一：导出ZIP包',
+                  subtitle: 'Markdown文档 + 图片资源（相对路径），解压后可直接在支持Markdown的AI工具中使用',
+                  selected: _exportMode == ExportMode.zip,
+                  onSelect: () => setState(() => _exportMode = ExportMode.zip),
+                ),
+                const SizedBox(height: 8),
+                _buildModeTile(
+                  icon: Icons.image,
+                  title: '方式二：复制提示词 + 图片PDF',
+                  subtitle: hasImages ? '仅导出图片素材PDF（无图片则跳过），自动复制AI调用提示词到剪贴板' : '当前无图片素材，点击后仅复制AI提示词',
+                  selected: _exportMode == ExportMode.imagePdf,
+                  onSelect: () => setState(() => _exportMode = ExportMode.imagePdf),
+                ),
+                const SizedBox(height: 8),
+                _buildModeTile(
+                  icon: Icons.picture_as_pdf,
+                  title: '方式三：完整PDF + AI提示词',
+                  subtitle: '导出包含提示词和图片的完整PDF，配合第三方AI调用提示词使用',
+                  selected: _exportMode == ExportMode.fullPdf,
+                  onSelect: () => setState(() => _exportMode = ExportMode.fullPdf),
+                ),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 16),
-        _AiExecutionPromptCard(
-          prompt: executionPrompt,
-          onCopy: _copyExecutionPrompt,
-        ),
+        if (_exportMode == ExportMode.fullPdf) ...[
+          const SizedBox(height: 16),
+          _ExportCard(
+            title: '📋 AI提示词内容（将写入PDF）',
+            content: prompt,
+          ),
+          const SizedBox(height: 16),
+          _AiExecutionPromptCard(
+            prompt: executionPrompt,
+            onCopy: _copyExecutionPrompt,
+          ),
+        ],
+        if (_exportMode == ExportMode.zip) ...[
+          const SizedBox(height: 16),
+          _ExportCard(
+            title: '📋 将打包进ZIP的Markdown内容',
+            content: prompt,
+          ),
+        ],
         const SizedBox(height: 16),
         Row(
           children: [
@@ -1375,8 +1458,8 @@ class _ExportTabState extends State<_ExportTab> {
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.picture_as_pdf),
-                label: Text(_isExporting ? '导出中...' : '导出PDF并分享'),
+                    : Icon(modeIcon),
+                label: Text(_isExporting ? '导出中...' : modeLabel),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size.fromHeight(50),
                   shape: RoundedRectangleBorder(
@@ -1387,20 +1470,26 @@ class _ExportTabState extends State<_ExportTab> {
             ),
           ],
         ),
-        if (savedPdfPath != null) ...[
+        if (savedPdfPath != null || savedZipPath != null) ...[
           const SizedBox(height: 16),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.check_circle, color: Colors.green),
-              title: const Text('PDF已生成'),
-              subtitle: Text(savedPdfPath),
+              leading: Icon(
+                savedZipPath != null ? Icons.check_circle : Icons.check_circle,
+                color: Colors.green,
+              ),
+              title: Text(savedZipPath != null ? 'ZIP已生成' : 'PDF已生成'),
+              subtitle: Text((savedZipPath ?? savedPdfPath) ?? ''),
               trailing: IconButton(
                 icon: const Icon(Icons.share),
                 onPressed: () async {
-                  await Share.shareXFiles(
-                    [XFile(savedPdfPath)],
-                    subject: '社交任务AI素材',
-                  );
+                  final path = savedZipPath ?? savedPdfPath;
+                  if (path != null) {
+                    await Share.shareXFiles(
+                      [XFile(path)],
+                      subject: '社交任务AI素材',
+                    );
+                  }
                 },
               ),
             ),
@@ -1421,6 +1510,62 @@ class _ExportTabState extends State<_ExportTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildModeTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool selected,
+    required VoidCallback onSelect,
+  }) {
+    return InkWell(
+      onTap: onSelect,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF6366F1).withOpacity(0.1) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? const Color(0xFF6366F1) : Colors.grey.shade300,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: selected ? const Color(0xFF6366F1) : Colors.grey, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: selected ? const Color(0xFF6366F1) : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 11, color: Colors.grey, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+              color: selected ? const Color(0xFF6366F1) : Colors.grey,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -1597,6 +1742,14 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     return buffer.toString().trim();
   }
 
+  int? _toInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is double) return value.round();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
   List<SocialTask> _parseAIImage(String aiResponse) {
     final uuid = const Uuid();
     final contactProvider = context.read<ContactProvider>();
@@ -1680,9 +1833,9 @@ class _PasteResultTabState extends State<_PasteResultTab> {
           type = TaskType.other;
       }
 
-      final priority = (taskData['priority'] as int?)?.clamp(1, 5) ?? 3;
-      final offsetDays = (taskData['scheduled_offset_days'] as int?) ?? 1;
-      final hour = (taskData['scheduled_hour'] as int?)?.clamp(8, 21) ?? 10;
+      final priority = _toInt(taskData['priority'])?.clamp(1, 5) ?? 3;
+      final offsetDays = _toInt(taskData['scheduled_offset_days']) ?? 1;
+      final hour = _toInt(taskData['scheduled_hour'])?.clamp(8, 21) ?? 10;
       final scheduledAt = DateTime(
         now.year,
         now.month,
