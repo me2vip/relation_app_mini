@@ -1055,7 +1055,7 @@ class PdfExporter {
     await zipDir.create(recursive: true);
 
     final imagesDir = Directory('${zipDir.path}/images');
-    List<String> relativeImagePaths = [];
+    final imageEntries = <_ImageEntry>[];
 
     if (attachments != null) {
       var imgIdx = 1;
@@ -1064,7 +1064,6 @@ class PdfExporter {
           final match = RegExp(r'!\[([^\]]*)\]\((.+)\)').firstMatch(att);
           if (match != null) {
             final srcPath = (match.group(2) ?? '').trim();
-            final alt = match.group(1) ?? '';
             final srcFile = File(srcPath);
             if (await srcFile.exists()) {
               final ext = srcPath.contains('.') ? srcPath.split('.').last : 'jpg';
@@ -1072,7 +1071,7 @@ class PdfExporter {
               final destPath = '${imagesDir.path}/$fileName';
               await imagesDir.create(recursive: true);
               await srcFile.copy(destPath);
-              relativeImagePaths.add('images/$fileName');
+              imageEntries.add(_ImageEntry('images/$fileName', ext));
               imgIdx++;
             }
           }
@@ -1114,11 +1113,12 @@ class PdfExporter {
     markdown.writeln(prompt);
     markdown.writeln();
 
-    if (relativeImagePaths.isNotEmpty) {
+    if (imageEntries.isNotEmpty) {
       markdown.writeln('## 图片素材');
       markdown.writeln();
-      for (var i = 0; i < relativeImagePaths.length; i++) {
-        markdown.writeln('![图片${i + 1}](images/image_${(i + 1).toString().padLeft(2, '0')}.jpg)');
+      for (var i = 0; i < imageEntries.length; i++) {
+        final entry = imageEntries[i];
+        markdown.writeln('![图片${i + 1}](${entry.relativePath})');
         markdown.writeln();
       }
     }
@@ -1139,19 +1139,15 @@ class PdfExporter {
     final encoder = ZipEncoder();
     final archive = Archive();
 
-    archive.addFile(
-      ArchiveFile('任务指令.md', mdFile.lengthSync(), mdFile.readAsBytesSync()),
-    );
+    final mdBytes = List<int>.from(mdFile.readAsBytesSync());
+    archive.addFile(ArchiveFile('任务指令.md', mdBytes.length, mdBytes));
 
-    if (relativeImagePaths.isNotEmpty) {
-      archive.addFile(ArchiveFile('images', 0, []));
-      for (final relPath in relativeImagePaths) {
-        final fullPath = '${zipDir.path}/$relPath';
-        final file = File(fullPath);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          archive.addFile(ArchiveFile(relPath, bytes.length, bytes));
-        }
+    for (final entry in imageEntries) {
+      final fullPath = '${zipDir.path}/${entry.relativePath}';
+      final file = File(fullPath);
+      if (await file.exists()) {
+        final bytes = List<int>.from(await file.readAsBytes());
+        archive.addFile(ArchiveFile(entry.relativePath, bytes.length, bytes));
       }
     }
 
@@ -1159,10 +1155,16 @@ class PdfExporter {
     if (zipBytes == null) {
       throw StateError('ZIP压缩失败');
     }
-    await zipFile.writeAsBytes(zipBytes);
+    await zipFile.writeAsBytes(List<int>.from(zipBytes));
 
     return zipFile;
   }
+
+class _ImageEntry {
+  final String relativePath;
+  final String ext;
+  _ImageEntry(this.relativePath, this.ext);
+}
 
   static Future<File?> exportImageOnlyPdf({
     required String title,
