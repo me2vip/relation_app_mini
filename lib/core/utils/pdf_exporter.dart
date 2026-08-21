@@ -34,7 +34,20 @@ class PdfExporter {
     if (_scanned) return;
     _scanned = true;
 
-    final candidates = <String>[];
+    // 优先级：硬编码最稳定的 DroidSans 路径（TTF 格式，Android 全版本可用）
+    // 然后再扫系统目录。**只试 .ttf/.otf，跳过 .ttc**（pdf 3.13 不支持 TTC 集合字体）
+    const hardCoded = [
+      '/system/fonts/DroidSansFallback.ttf',
+      '/system/fonts/DroidSans.ttf',
+      '/system/fonts/DroidSansFallbackFull.ttf',
+      '/system/fonts/RobotoFallback-Regular.ttf',
+      '/system/fonts/RobotoFallback.ttf',
+      '/system/fonts/NotoSans-Regular.ttf',
+      '/system/fonts/NotoSerif-Regular.ttf',
+    ];
+
+    final candidates = <String>[...hardCoded];
+
     try {
       const fontDirs = [
         '/system/fonts',
@@ -50,9 +63,8 @@ class PdfExporter {
           await for (final f in d.list(recursive: false, followLinks: false)) {
             if (f is! File) continue;
             final lower = f.path.toLowerCase();
-            if (lower.endsWith('.ttf') ||
-                lower.endsWith('.otf') ||
-                lower.endsWith('.ttc')) {
+            // ★ 只收集 TTF/OTF，TTC 集合格式 pdf 库不支持
+            if (lower.endsWith('.ttf') || lower.endsWith('.otf')) {
               candidates.add(f.path);
             }
           }
@@ -60,45 +72,65 @@ class PdfExporter {
       }
     } catch (_) {}
 
+    // 去重
+    final seen = <String>{};
+    candidates.removeWhere((p) => !seen.add(p));
+
+    // 排序：硬编码路径最前，其余按关键词优先级
     String score(String path) {
+      for (var i = 0; i < hardCoded.length; i++) {
+        if (path == hardCoded[i]) return '00_$i';
+      }
       final lower = path.toLowerCase();
       for (var i = 0; i < _fontKeywords.length; i++) {
         if (lower.contains(_fontKeywords[i].toLowerCase())) {
-          return '${i.toString().padLeft(2, '0')}_${lower.split('/').last}';
+          return '${(i + 1).toString().padLeft(2, '0')}_${lower.split('/').last}';
         }
       }
       return '99_${lower.split('/').last}';
     }
     candidates.sort((a, b) => score(a).compareTo(score(b)));
 
+    // ignore: avoid_print
+    print('[PdfExporter] 待扫描字体 ${candidates.length} 个: ${candidates.take(5).join(', ')}...');
+
     for (final path in candidates) {
       try {
         final file = File(path);
         final bytes = await file.readAsBytes();
-        if (bytes.length < 1024) continue;
+        if (bytes.length < 1024) {
+          // ignore: avoid_print
+          print('[PdfExporter] 跳过 $path: 文件过小 (${bytes.length} bytes)');
+          continue;
+        }
         try {
           final font = pw.Font.ttf(bytes.buffer.asByteData());
-          _chineseFont = font;
+          // 验证：用这个字体渲染 "测试" 两字的 TextStyle 构造是否正常
+          final probe = pw.TextStyle(font: font, fontSize: 12);
           // ignore: avoid_print
-          print('[PdfExporter] 扫描${candidates.length}个字体，已加载CJK字体: ${path.split('/').last}');
+          print('[PdfExporter] 成功加载字体: ${path.split('/').last} (${bytes.length} bytes) probe=${probe.fontSize}');
+          _chineseFont = font;
           return;
-        } catch (_) {}
-      } catch (_) {}
+        } catch (e) {
+          // ignore: avoid_print
+          print('[PdfExporter] 解析失败 $path: $e');
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('[PdfExporter] 读取失败 $path: $e');
+      }
     }
 
     // ignore: avoid_print
-    print('[PdfExporter] 扫描${candidates.length}个字体，未找到可加载的中文字体，使用系统默认字体');
+    print('[PdfExporter] 全部 ${candidates.length} 个字体均未成功加载，将使用内置 Helvetica（中文显示为□）');
   }
 
   /// 构造 ThemeData：
-  /// - 找到中文字体：只传 base，**故意不传 bold/italic/boldItalic**，
-  ///   避免 pdf 库内部做 4 字体交叉检查（pdf 3.13 内部有 ! 断言）。
-  ///   TextStyle 在需要时显式设置 font: _chineseFont（_ts 已处理）。
-  /// - 否则退回 ThemeData.withFont() 全空，pdf 使用内置 Helvetica。
+  /// 注意：pdf 3.13 在 TextStyle 已显式设 font 时，ThemeData 的 base/bold
+  /// 会做二次检查，可能干扰。这里保持 ThemeData.withFont() 全空，
+  /// 让 _ts() 的 font 设置直接生效。
   static pw.ThemeData _buildTheme() {
-    final f = _chineseFont;
-    if (f == null) return pw.ThemeData.withFont();
-    return pw.ThemeData.withFont(base: f);
+    return pw.ThemeData.withFont();
   }
 
   // ==================================================================
@@ -356,6 +388,32 @@ class PdfExporter {
         flushPara();
         final g = ord.group(1);
         if (g != null) {
+          // 列表项如果其实是图片语法，交给图片处理（不加进列表）
+          final innerImg = imageLine.firstMatch(g.trim());
+          if (innerImg != null) {
+            flushList();
+            final alt = innerImg.group(1) ?? '';
+            final path = (innerImg.group(2) ?? '').trim();
+            if (path.isNotEmpty) {
+              final w = _tryLoadImage(path, alt);
+              if (w != null) {
+                out.add(pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _txt('${(listBuffer.length + 1)}.', 11),
+                    pw.SizedBox(height: 4),
+                    w,
+                    if (alt.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      _txt(alt, 10, color: PdfColors.grey600),
+                    ],
+                    pw.SizedBox(height: 14),
+                  ],
+                ));
+                continue;
+              }
+            }
+          }
           if (listLevel != 1) flushList();
           listLevel = 1;
           listBuffer.add(g.trim());
@@ -368,6 +426,32 @@ class PdfExporter {
         flushPara();
         final g = unord.group(1);
         if (g != null) {
+          // 列表项如果其实是图片语法，交给图片处理
+          final innerImg = imageLine.firstMatch(g.trim());
+          if (innerImg != null) {
+            flushList();
+            final alt = innerImg.group(1) ?? '';
+            final path = (innerImg.group(2) ?? '').trim();
+            if (path.isNotEmpty) {
+              final w = _tryLoadImage(path, alt);
+              if (w != null) {
+                out.add(pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    _txt('•', 11),
+                    pw.SizedBox(height: 4),
+                    w,
+                    if (alt.isNotEmpty) ...[
+                      pw.SizedBox(height: 4),
+                      _txt(alt, 10, color: PdfColors.grey600),
+                    ],
+                    pw.SizedBox(height: 14),
+                  ],
+                ));
+                continue;
+              }
+            }
+          }
           if (listLevel != 2) flushList();
           listLevel = 2;
           listBuffer.add(g.trim());
@@ -491,7 +575,13 @@ class PdfExporter {
       md.writeln('以下素材已通过APP附加，请AI分析时结合考虑：');
       md.writeln();
       for (final att in attachments) {
-        md.writeln('- $att');
+        // 图片引用行直接原样输出（让 _renderMarkdown 的顶层 imageLine
+        // 正则能正确匹配），其他文本行作为无序列表项
+        if (att.startsWith('![') && att.contains('](')) {
+          md.writeln(att);
+        } else {
+          md.writeln('- $att');
+        }
       }
       md.writeln();
     }
