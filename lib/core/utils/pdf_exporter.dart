@@ -234,7 +234,7 @@ class PdfExporter {
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final filePath = '${dir.path}/$fileName';
 
-    final List<int> bytes;
+    List<int> bytes;
     try {
       bytes = await pdf.save();
     } catch (e) {
