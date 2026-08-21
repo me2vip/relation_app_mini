@@ -30,6 +30,7 @@ import 'ui/pages/user_profile_page.dart';
 import 'ui/pages/contact_social_page.dart';
 import 'core/providers/profile_provider.dart';
 import 'core/providers/contact_social_provider.dart';
+import 'core/providers/channel_config_provider.dart';
 import 'services/notification_service.dart';
 
 // GlobalKey 用于访问 MyApp 状态
@@ -89,6 +90,7 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider(create: (_) => ChannelProvider()),
         ChangeNotifierProvider(create: (_) => ProfileProvider()),
         ChangeNotifierProvider(create: (_) => ContactSocialProvider()),
+        ChangeNotifierProvider(create: (_) => ChannelConfigProvider()),
       ],
       child: MaterialApp(
         title: '社交塔子',

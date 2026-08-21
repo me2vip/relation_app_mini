@@ -4,6 +4,7 @@ import '../models/task.dart';
 import '../models/ai_config.dart';
 import '../models/user_profile.dart';
 import '../models/contact_social.dart';
+import '../models/social_channel_config.dart';
 import 'ai_service.dart';
 
 class TaskGeneratorService {
@@ -17,6 +18,7 @@ class TaskGeneratorService {
     UserProfile? userProfile,
     ContactSocial? contactSocial,
     List<InteractionLog>? interactionLogs,
+    List<ContactChannelConfig>? channelConfigs,
   }) async {
     if (contact.goalRelation == null || contact.goalRelation!.isEmpty) {
       return [];
@@ -28,6 +30,7 @@ class TaskGeneratorService {
       userProfile: userProfile,
       contactSocial: contactSocial,
       interactionLogs: interactionLogs,
+      channelConfigs: channelConfigs,
     );
     
     final messages = [
@@ -58,6 +61,7 @@ class TaskGeneratorService {
     UserProfile? userProfile,
     ContactSocial? contactSocial,
     List<InteractionLog>? interactionLogs,
+    List<ContactChannelConfig>? channelConfigs,
   }) {
     final goal = contact.goalRelation ?? '普通朋友';
     
@@ -144,6 +148,31 @@ class TaskGeneratorService {
       for (final log in interactionLogs.take(5)) {
         buffer.writeln('- [${log.sourceName}] ${log.title} (情绪:${log.emotionalTone ?? '中性'})');
       }
+    }
+
+    // 可用社交途径
+    if (channelConfigs != null && channelConfigs.isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('## 可用社交途径');
+      for (final config in channelConfigs) {
+        final platformCfg = getPlatformConfig(config.platform);
+        buffer.writeln('- ${platformCfg.emoji} ${platformCfg.name}');
+        if (config.account != null && config.account!.isNotEmpty) {
+          buffer.writeln('  账号: ${config.account}');
+        }
+        if (config.enabledFeatures.isNotEmpty) {
+          final featureNames = config.enabledFeatures.map((f) {
+            final fc = platformCfg.features.where((ff) => ff.feature == f).first;
+            return '${fc.emoji}${fc.name}';
+          }).join('、');
+          buffer.writeln('  可用功能: $featureNames');
+        }
+        if (config.preferredModes.isNotEmpty) {
+          final modeNames = config.preferredModes.map((m) => getModeConfig(m).map((mc) => '${mc.emoji}${mc.name}').join('、');
+          buffer.writeln('  偏好方式: $modeNames');
+        }
+      }
+      buffer.writeln('注意：生成的任务应优先使用上述可用的社交途径和功能。');
     }
 
     buffer.writeln('');

@@ -8,6 +8,7 @@ import '../../models/ai_config.dart';
 import '../../models/contact.dart';
 import '../../models/user_profile.dart';
 import '../../models/contact_social.dart';
+import '../../models/social_channel_config.dart';
 
 class TaskProvider extends ChangeNotifier {
   final _uuid = const Uuid();
@@ -139,6 +140,7 @@ class TaskProvider extends ChangeNotifier {
     UserProfile? userProfile,
     ContactSocial? contactSocial,
     List<InteractionLog>? interactionLogs,
+    List<ContactChannelConfig>? channelConfigs,
   }) async {
     try {
       final tasks = await TaskGeneratorService.generateTasks(
@@ -149,6 +151,7 @@ class TaskProvider extends ChangeNotifier {
         userProfile: userProfile,
         contactSocial: contactSocial,
         interactionLogs: interactionLogs,
+        channelConfigs: channelConfigs,
       );
 
       for (final task in tasks) {
