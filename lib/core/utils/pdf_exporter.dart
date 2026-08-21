@@ -1219,18 +1219,6 @@ class PdfExporter {
     return zipFile;
   }
 
-class _ImageEntry {
-  final String relativePath;
-  final String ext;
-  _ImageEntry(this.relativePath, this.ext);
-}
-
-class _ImageData {
-  final String alt;
-  final List<int> bytes;
-  _ImageData(this.alt, this.bytes);
-}
-
   static Future<File?> exportImageOnlyPdf({
     required String title,
     List<String>? attachments,
@@ -1323,4 +1311,16 @@ class _ImageData {
     await file.writeAsBytes(await pdf.save());
     return file;
   }
+}
+
+class _ImageEntry {
+  final String relativePath;
+  final String ext;
+  _ImageEntry(this.relativePath, this.ext);
+}
+
+class _ImageData {
+  final String alt;
+  final List<int> bytes;
+  _ImageData(this.alt, this.bytes);
 }

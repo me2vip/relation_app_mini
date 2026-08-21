@@ -5,6 +5,7 @@ import 'core/providers/app_provider.dart';
 import 'core/providers/contact_provider.dart';
 import 'core/providers/task_provider.dart';
 import 'models/task.dart';
+import 'models/contact.dart';
 import 'core/providers/ai_provider.dart';
 import 'core/providers/persona_provider.dart';
 import 'core/providers/channel_provider.dart';

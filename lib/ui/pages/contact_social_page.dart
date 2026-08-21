@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/contact_social_provider.dart';
+import '../../core/providers/profile_provider.dart';
 import '../../models/contact.dart';
 import '../../models/contact_social.dart';
 
@@ -105,7 +106,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '选择你与${widget.contact.name}的社交发展方向',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
@@ -688,7 +689,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
+                  Text(
                     '与${widget.contact.name}应避免的话题',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
@@ -857,9 +858,11 @@ class _ContactSocialPageState extends State<ContactSocialPage>
               OutlinedButton(
                 onPressed: () async {
                   if (contentController.text.trim().isEmpty) return;
+                  final len = contentController.text.length;
+                  final endIndex = len > 20 ? 20 : len;
                   Navigator.pop(ctx, {
                     'title': titleController.text.trim().isEmpty
-                        ? 'AI分析: ${contentController.text.substring(0, contentController.text.length > 20 ? 20 : contentController.text)}'
+                        ? 'AI分析: ${contentController.text.substring(0, endIndex)}'
                         : titleController.text.trim(),
                     'content': contentController.text.trim(),
                     'useAI': true,

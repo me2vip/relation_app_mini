@@ -168,7 +168,10 @@ class TaskGeneratorService {
           buffer.writeln('  可用功能: $featureNames');
         }
         if (config.preferredModes.isNotEmpty) {
-          final modeNames = config.preferredModes.map((m) => getModeConfig(m).map((mc) => '${mc.emoji}${mc.name}').join('、');
+          final modeNames = config.preferredModes.map((m) {
+            final mc = getModeConfig(m);
+            return '${mc.emoji}${mc.name}';
+          }).join('、');
           buffer.writeln('  偏好方式: $modeNames');
         }
       }

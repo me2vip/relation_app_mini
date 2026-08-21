@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 
 /// 社交途径层级模型
 ///
-/// 平台 (SocialPlatform) → 子渠道 (ChannelFeature) → 互动类型 (InteractionMode)
-/// 用户为每个联系人定义可用的社交途径组合。
+/// 平台 (SocialPlatform) → 子渠道 (ChannelFeatureConfig) → 互动类型 (InteractionMode)
 
-/// 社交平台定义
 enum SocialPlatform {
   wechat,
   qq,
@@ -22,13 +20,12 @@ enum SocialPlatform {
   custom;
 }
 
-/// 社交平台配置
 class PlatformConfig {
   final SocialPlatform platform;
   final String name;
   final String emoji;
   final Color color;
-  final List<ChannelFeature> features;
+  final List<ChannelFeatureConfig> features;
 
   const PlatformConfig({
     required this.platform,
@@ -39,23 +36,17 @@ class PlatformConfig {
   });
 }
 
-/// 子渠道/功能特性
 enum ChannelFeature {
   privateChat,
   groupChat,
   moments,
   daily,
   space,
-  videoShare,
-  voiceCall,
-  videoCall,
-  textMessage,
-  voiceMessage,
+  feed,
   offlineMeetup,
   customFeature;
 }
 
-/// 子渠道配置
 class ChannelFeatureConfig {
   final ChannelFeature feature;
   final String name;
@@ -70,7 +61,6 @@ class ChannelFeatureConfig {
   });
 }
 
-/// 互动模式
 enum InteractionMode {
   textMessage,
   voiceMessage,
@@ -85,7 +75,6 @@ enum InteractionMode {
   customMode;
 }
 
-/// 互动模式配置
 class InteractionModeConfig {
   final InteractionMode mode;
   final String name;
@@ -98,7 +87,6 @@ class InteractionModeConfig {
   });
 }
 
-/// 联系人可用的社交途径配置
 class ContactChannelConfig {
   final String id;
   final String contactId;
@@ -194,10 +182,6 @@ const List<PlatformConfig> kPlatformConfigs = [
           supportedModes: [InteractionMode.textMessage, InteractionMode.voiceMessage, InteractionMode.emojiSticker]),
       ChannelFeatureConfig(feature: ChannelFeature.moments, name: '朋友圈', emoji: '📸',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '语音通话', emoji: '📞',
-          supportedModes: [InteractionMode.voiceCall]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoCall, name: '视频通话', emoji: '📹',
-          supportedModes: [InteractionMode.videoCall]),
     ],
   ),
   PlatformConfig(
@@ -212,10 +196,6 @@ const List<PlatformConfig> kPlatformConfigs = [
           supportedModes: [InteractionMode.textMessage, InteractionMode.voiceMessage, InteractionMode.emojiSticker]),
       ChannelFeatureConfig(feature: ChannelFeature.space, name: 'QQ空间', emoji: '🌌',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '语音通话', emoji: '📞',
-          supportedModes: [InteractionMode.voiceCall]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoCall, name: '视频通话', emoji: '📹',
-          supportedModes: [InteractionMode.videoCall]),
     ],
   ),
   PlatformConfig(
@@ -228,10 +208,8 @@ const List<PlatformConfig> kPlatformConfigs = [
           supportedModes: [InteractionMode.textMessage, InteractionMode.emojiSticker, InteractionMode.voiceCall, InteractionMode.videoCall]),
       ChannelFeatureConfig(feature: ChannelFeature.daily, name: '日常', emoji: '📸',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoShare, name: '视频分享', emoji: '🎬',
+      ChannelFeatureConfig(feature: ChannelFeature.feed, name: '视频分享', emoji: '🎬',
           supportedModes: [InteractionMode.videoShare]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '语音通话', emoji: '📞',
-          supportedModes: [InteractionMode.voiceCall]),
     ],
   ),
   PlatformConfig(
@@ -244,10 +222,8 @@ const List<PlatformConfig> kPlatformConfigs = [
           supportedModes: [InteractionMode.textMessage, InteractionMode.emojiSticker, InteractionMode.voiceCall, InteractionMode.videoCall]),
       ChannelFeatureConfig(feature: ChannelFeature.daily, name: '日常', emoji: '📸',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoShare, name: '视频分享', emoji: '🎬',
+      ChannelFeatureConfig(feature: ChannelFeature.feed, name: '视频分享', emoji: '🎬',
           supportedModes: [InteractionMode.videoShare]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '语音通话', emoji: '📞',
-          supportedModes: [InteractionMode.voiceCall]),
     ],
   ),
   PlatformConfig(
@@ -258,7 +234,7 @@ const List<PlatformConfig> kPlatformConfigs = [
     features: [
       ChannelFeatureConfig(feature: ChannelFeature.privateChat, name: '私信', emoji: '💬',
           supportedModes: [InteractionMode.textMessage, InteractionMode.emojiSticker]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoShare, name: '笔记分享', emoji: '📝',
+      ChannelFeatureConfig(feature: ChannelFeature.feed, name: '笔记分享', emoji: '📝',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
     ],
   ),
@@ -270,7 +246,7 @@ const List<PlatformConfig> kPlatformConfigs = [
     features: [
       ChannelFeatureConfig(feature: ChannelFeature.privateChat, name: '私信', emoji: '💬',
           supportedModes: [InteractionMode.textMessage, InteractionMode.emojiSticker]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoShare, name: '动态', emoji: '📰',
+      ChannelFeatureConfig(feature: ChannelFeature.feed, name: '动态', emoji: '📰',
           supportedModes: [InteractionMode.videoShare, InteractionMode.textMessage]),
     ],
   ),
@@ -282,7 +258,7 @@ const List<PlatformConfig> kPlatformConfigs = [
     features: [
       ChannelFeatureConfig(feature: ChannelFeature.privateChat, name: '私信', emoji: '💬',
           supportedModes: [InteractionMode.textMessage]),
-      ChannelFeatureConfig(feature: ChannelFeature.videoShare, name: '视频', emoji: '📺',
+      ChannelFeatureConfig(feature: ChannelFeature.feed, name: '视频', emoji: '📺',
           supportedModes: [InteractionMode.videoShare]),
     ],
   ),
@@ -294,8 +270,6 @@ const List<PlatformConfig> kPlatformConfigs = [
     features: [
       ChannelFeatureConfig(feature: ChannelFeature.groupChat, name: '组队聊天', emoji: '👥',
           supportedModes: [InteractionMode.voiceCall, InteractionMode.textMessage, InteractionMode.groupActivity]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '开黑语音', emoji: '🎙️',
-          supportedModes: [InteractionMode.voiceCall]),
     ],
   ),
   PlatformConfig(
@@ -306,8 +280,6 @@ const List<PlatformConfig> kPlatformConfigs = [
     features: [
       ChannelFeatureConfig(feature: ChannelFeature.groupChat, name: '组队聊天', emoji: '👥',
           supportedModes: [InteractionMode.voiceCall, InteractionMode.textMessage, InteractionMode.groupActivity]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '开黑语音', emoji: '🎙️',
-          supportedModes: [InteractionMode.voiceCall]),
     ],
   ),
   PlatformConfig(
@@ -316,12 +288,8 @@ const List<PlatformConfig> kPlatformConfigs = [
     emoji: '🤝',
     color: Color(0xFF27AE60),
     features: [
-      ChannelFeatureConfig(feature: ChannelFeature.offlineMeetup, name: '面对面', emoji: '😀',
-          supportedModes: [InteractionMode.offlineMeeting, InteractionMode.groupActivity]),
-      ChannelFeatureConfig(feature: ChannelFeature.locationShare, name: '一起活动', emoji: '📍',
-          supportedModes: [InteractionMode.offlineMeeting, InteractionMode.groupActivity]),
-      ChannelFeatureConfig(feature: ChannelFeature.giftSend, name: '送礼', emoji: '🎁',
-          supportedModes: [InteractionMode.giftSend]),
+      ChannelFeatureConfig(feature: ChannelFeature.offlineMeetup, name: '面对面互动', emoji: '😀',
+          supportedModes: [InteractionMode.offlineMeeting, InteractionMode.groupActivity, InteractionMode.giftSend]),
     ],
   ),
   PlatformConfig(
@@ -330,10 +298,8 @@ const List<PlatformConfig> kPlatformConfigs = [
     emoji: '📞',
     color: Color(0xFF2C3E50),
     features: [
-      ChannelFeatureConfig(feature: ChannelFeature.voiceCall, name: '语音通话', emoji: '📞',
-          supportedModes: [InteractionMode.voiceCall]),
-      ChannelFeatureConfig(feature: ChannelFeature.voiceMessage, name: '语音信箱', emoji: '🎙️',
-          supportedModes: [InteractionMode.voiceMessage]),
+      ChannelFeatureConfig(feature: ChannelFeature.privateChat, name: '语音通话', emoji: '📞',
+          supportedModes: [InteractionMode.voiceCall, InteractionMode.videoCall, InteractionMode.voiceMessage]),
     ],
   ),
   PlatformConfig(
@@ -342,7 +308,7 @@ const List<PlatformConfig> kPlatformConfigs = [
     emoji: '✉️',
     color: Color(0xFF2980B9),
     features: [
-      ChannelFeatureConfig(feature: ChannelFeature.textMessage, name: '文字短信', emoji: '💬',
+      ChannelFeatureConfig(feature: ChannelFeature.privateChat, name: '文字短信', emoji: '💬',
           supportedModes: [InteractionMode.textMessage]),
     ],
   ),
@@ -385,15 +351,13 @@ ChannelFeatureConfig getFeatureConfig(ChannelFeature feature) {
       if (f.feature == feature) return f;
     }
   }
-  return platform_config_placeholder;
+  return const ChannelFeatureConfig(
+    feature: ChannelFeature.customFeature,
+    name: '自定义',
+    emoji: '✨',
+    supportedModes: [],
+  );
 }
-
-const ChannelFeatureConfig platform_config_placeholder = ChannelFeatureConfig(
-  feature: ChannelFeature.customFeature,
-  name: '自定义',
-  emoji: '✨',
-  supportedModes: [],
-);
 
 InteractionModeConfig getModeConfig(InteractionMode mode) {
   return kInteractionModeConfigs.firstWhere(

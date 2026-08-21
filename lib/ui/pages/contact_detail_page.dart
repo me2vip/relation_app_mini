@@ -1754,10 +1754,10 @@ class _RelationshipTab extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   '目标: ${contact.goalRelation}',
+                                  textAlign: TextAlign.end,
                                   style: const TextStyle(
                                       color: Colors.white70,
                                       fontSize: 12,
-                                      textAlign: TextAlign.end,
                                       overflow: TextOverflow.ellipsis),
                                 ),
                               ),
