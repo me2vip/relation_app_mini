@@ -1117,11 +1117,29 @@ class _ExportTabState extends State<_ExportTab> {
       File file;
       String pdfLevel = 'L1';
       String pdfFallbackReport = '';
+      File? mdSidecar;
       try {
-        final result = await PdfExporter.exportExternalAIPdfEx(
-          title: '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
+        final titleStr = '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
+        // 先构建 Markdown 原文侧车文件（分享 PDF 时一并附上，
+        // 即便 L2/L3 内置 Helvetica 把中文变 □，AI 读 .md 也能看完整中文）
+        final prompt = _buildPrompt(data, contactProvider);
+        final attachments = data.getAttachmentDescriptions();
+        final contactsStr = contacts.isEmpty ? null : '${contacts.length}位联系人';
+        final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(DateTime.now());
+        final mdText = PdfExporter.buildMarkdown(
+          title: titleStr,
           prompt: prompt,
-          contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
+          contactName: contactsStr,
+          context: data.sourceText,
+          attachments: attachments.isNotEmpty ? attachments : null,
+          dateStr: dateStr,
+        );
+        mdSidecar = await PdfExporter.writeMarkdownSidecar(titleStr, mdText);
+
+        final result = await PdfExporter.exportExternalAIPdfEx(
+          title: titleStr,
+          prompt: prompt,
+          contactName: contactsStr,
           context: data.sourceText,
           attachments: attachments.isNotEmpty ? attachments : null,
         );
@@ -1130,10 +1148,10 @@ class _ExportTabState extends State<_ExportTab> {
         pdfFallbackReport = result.fallbackReport;
         usedFallbackLevel = pdfLevel == 'L1' ? null : pdfLevel;
         if (pdfFallbackReport.isNotEmpty) {
-          fallbackErrorsText = 'PDF最终走层级$pdfLevel；L1/L2失败记录:\n$pdfFallbackReport';
+          fallbackErrorsText =
+              'PDF最终走层级$pdfLevel；L1/L2失败记录:\n$pdfFallbackReport';
         }
       } on StateError catch (pdfErr, pdfSt) {
-        // PdfExporter 已经尝试 L1/L2/L3，统一抛出 "三次导出均失败"
         // ignore: avoid_print
         print('[Pdf导出全部层级失败] ${pdfErr.message}\n$pdfSt');
         rethrow;
@@ -1149,10 +1167,25 @@ class _ExportTabState extends State<_ExportTab> {
       if (mounted) {
         phase = '调用Share.shareXFiles分享';
         try {
+          // PDF + .md 原文侧车一起分享：
+          // 即便 L2/L3 下 PDF 中文为 □，AI 读 .md 附件也能看到完整 UTF-8 中文
+          final allFiles = <XFile>[XFile(savedPath)];
+          final mc = mdSidecar;
+          if (mc != null && mc.existsSync()) {
+            allFiles.add(XFile(mc.path));
+          }
+          final mdHint = (mc != null)
+              ? '；同附 .md 原文文件，外部AI读 .md 可看到完整中文，无需解析PDF字体'
+              : '';
+          final levelHint = (usedFallbackLevel != null)
+              ? '  (PDF采用兼容层级$usedFallbackLevel渲染)$mdHint'
+              : mdHint;
           await Share.shareXFiles(
-            [XFile(savedPath)],
+            allFiles,
             subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
-            text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议',
+            text:
+                '请将此PDF发送给外部AI（千问/豆包/GPT等），让AI按文档要求生成任务建议$levelHint。'
+                '将AI回复完整复制回APP即可自动保存任务。',
           );
         } catch (shareErr, shareSt) {
           final shareReport = '阶段=分享 PDF\n'

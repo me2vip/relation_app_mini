@@ -354,6 +354,25 @@ class PdfExporter {
     return out;
   }
 
+  /// 构造标准 Markdown 字符串（public：UI 层需要先构建侧车 .md 文件时调用）
+  static String buildMarkdown({
+    required String title,
+    required String prompt,
+    String? contactName,
+    String? context,
+    List<String>? attachments,
+    required String dateStr,
+  }) {
+    return _buildMarkdown(
+      title: title,
+      prompt: prompt,
+      contactName: contactName,
+      context: context,
+      attachments: attachments,
+      dateStr: dateStr,
+    );
+  }
+
   /// 构造标准 Markdown 字符串
   static String _buildMarkdown({
     required String title,
@@ -435,7 +454,10 @@ class PdfExporter {
 
   /// 导出结果：不仅包含文件，还包含本次最终走了哪一层、L1/L2 失败记录（若有），
   /// 便于 UI 层给用户提示（你连不到 PC 也能把失败报告复制给作者）。
-  static Future<(File file, String level, String fallbackReport)> exportExternalAIPdfEx({
+  ///
+  /// 注意：使用**具名** record，调用方通过 `r.file / r.level / r.fallbackReport`
+  /// 取值（与 `(File, String, String)` 位置型 record 不是同一种类型）。
+  static Future<({File file, String level, String fallbackReport})> exportExternalAIPdfEx({
     required String title,
     required String prompt,
     String? contactName,
@@ -465,6 +487,9 @@ class PdfExporter {
         try {
           pw.ThemeData theme;
           if (attempt == 1) {
+            // L1：尝试加载系统 CJK 字体 + Markdown 渲染；
+            // 注意：因 pdf 3.13 内部 save() 的字体子集化不暴露 API 让我们关闭，
+            // 若加载中文字体后 save 仍炸 null，L2 会立即退回无字体模式。
             try {
               await _scanAndLoadFonts();
             } catch (_) {}
@@ -477,6 +502,8 @@ class PdfExporter {
               fallbackReport: errors.join('\n'),
             );
           } else if (attempt == 2) {
+            // L2：零字体 + Markdown 渲染。
+            // pdf 使用内置 Helvetica，中文会变 □，但不会触发字体相关 ! 断言。
             theme = pw.ThemeData.withFont();
             _chineseFont = null;
             final widgets = _renderMarkdown(markdown);
@@ -487,6 +514,7 @@ class PdfExporter {
               fallbackReport: errors.join('\n'),
             );
           } else {
+            // L3：零字体 + 纯文本单页（终极兜底）。
             theme = pw.ThemeData.withFont();
             _chineseFont = null;
             final bytes = await _renderPlainTextFallback(
@@ -520,7 +548,10 @@ class PdfExporter {
       throw StateError('PDF导出失败: 未知错误');
     } catch (e, st) {
       // 二次兜底：若 for 循环外、入口处的未捕获异常也在此合并
-      if (e is StateError && e.message.startsWith('三次导出均失败')) rethrow;
+      if (e is StateError &&
+          (e.message ?? '').startsWith('三次导出均失败')) {
+        rethrow;
+      }
       final extra = _formatError('GLOBAL', e, st);
       throw StateError('三次导出均失败(global catch)\n$extra');
     }
@@ -599,7 +630,7 @@ class PdfExporter {
       }
     }
 
-    final bytes = await pdf.save(subsetFonts: false);
+    final bytes = await pdf.save();
     return _writePdfFile(title, now, bytes);
   }
 
@@ -720,8 +751,29 @@ class PdfExporter {
       print('[PdfExporter L3] addPage失败，尝试最小空页: $e\n$st');
       pdf.addPage(pw.Page(build: (_) => pw.Text('fallback')));
     }
-    // 关键点：关闭 subsetFonts，避免字体子集化触发系统字体 cmap !断言
-    return pdf.save(subsetFonts: false);
+    // pdf 3.13 不暴露 subsetFonts 参数，直接默认 save()；
+    // 如果传入了中文字体触发 subset 内部 null，L2/L3 无字体模式能兜底。
+    return pdf.save();
+  }
+
+  /// 把完整中文 Markdown 原文写进临时 .md 文件，分享 PDF 时一起作为附件，
+  /// 这样即便 PDF 用内置 Helvetica 把中文渲染成 □，第三方 AI 读 .md 附件
+  /// 也能 100% 获取到中文原文。
+  static Future<File> writeMarkdownSidecar(String title, String markdown) async {
+    Directory dir;
+    try {
+      dir = await getTemporaryDirectory();
+    } catch (_) {
+      dir = Directory.systemTemp;
+    }
+    final timestamp =
+        DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final fileName = '社交塔子_${safeTitle}_$timestamp.md';
+    final filePath = '${dir.path}/$fileName';
+    final f = File(filePath);
+    await f.writeAsString(markdown);
+    return f;
   }
 
   static Future<void> sharePdf(File pdfFile) async {
