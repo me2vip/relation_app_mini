@@ -803,7 +803,6 @@ class PdfExporter {
         style: PdfStyle.light.copyWith(
           accentColor: PdfColor.fromInt(0xFF0066CC),
           footerLeftText: '社交塔子 AI任务中心',
-          footerCenterText: 'AI 任务生成素材',
           showPageNumbers: true,
           bodyFontSize: 13,
         ),
@@ -895,7 +894,7 @@ class PdfExporter {
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final filePath = '${dir.path}/$fileName';
     final file = File(filePath);
-    await file.writeBytes(bytes);
+    await file.writeAsBytes(bytes);
     return file;
   }
 
