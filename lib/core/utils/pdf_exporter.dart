@@ -191,7 +191,7 @@ class PdfExporter {
 
   static Future<pw.Font?> _tryLoadTtcFont(String path, List<int> bytes) async {
     try {
-      final font = pw.Font.ttf(bytes.buffer.asByteData());
+      final font = pw.Font.ttf(Uint8List.fromList(bytes).buffer.asByteData());
       if (_validateFont(font)) {
         return font;
       }
@@ -206,7 +206,7 @@ class PdfExporter {
   static Future<pw.Font?> _extractTtcSubFont(String ttcPath) async {
     try {
       final file = File(ttcPath);
-      final raf = file.openRead();
+      final raf = await file.open();
       final header = List<int>.filled(12, 0);
       await raf.readInto(header);
       await raf.close();
