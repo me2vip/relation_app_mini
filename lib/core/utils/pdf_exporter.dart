@@ -215,6 +215,35 @@ class PdfExporter {
     final fence = RegExp(r'^\s*```');
     final atx = RegExp(r'^(#{1,6})\s+(.*)$');
     final hr = RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$');
+    // 整行 Markdown 图片引用：![alt](path)
+    //   路径里允许中文/空格等非 ASCII，用非贪婪 .+? 匹配 () 内直到末尾空格或 EOL
+    final imageLine = RegExp(r'^\s*!\[([^\]]*)\]\((.+)\)\s*$');
+
+    /// 读本地文件渲染为 pw.Image（宽度按 A4 页宽-80px 左右），失败返回 null
+    pw.Widget? _tryLoadImage(String path, String alt) {
+      try {
+        final f = File(path);
+        if (!f.existsSync()) return null;
+        final bytes = f.readAsBytesSync();
+        if (bytes.isEmpty) return null;
+        final mem = pw.MemoryImage(bytes);
+        // 不抛异常：先估算尺寸。宽度统一限制到约 A4 内容宽度 515 点，
+        // 高度上限 360 点（避免一张图占满整页）。
+        return pw.ClipRRect(
+          horizontalRadius: 6,
+          verticalRadius: 6,
+          child: pw.Image(mem,
+              width: 515,
+              height: 360,
+              fit: pw.BoxFit.contain,
+              alignment: pw.Alignment.center),
+        );
+      } catch (e) {
+        // ignore: avoid_print
+        print('[PdfExporter] 图片渲染失败 path=$path alt=$alt: $e');
+        return null;
+      }
+    }
 
     for (var i = 0; i < lines.length; i++) {
       final line = lines[i];
@@ -242,6 +271,45 @@ class PdfExporter {
         out.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
         out.add(pw.SizedBox(height: 10));
         continue;
+      }
+
+      // 图片优先：**整行就是图片语法**（attachment 我们就是这么加的），
+      // 所以放在其他语法之前检查
+      final img = imageLine.firstMatch(line);
+      if (img != null) {
+        flushPara();
+        flushList();
+        final alt = img.group(1) ?? '';
+        final path = (img.group(2) ?? '').trim();
+        if (path.isNotEmpty) {
+          final w = _tryLoadImage(path, alt);
+          if (w != null) {
+            if (alt.isNotEmpty) {
+              out.add(pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.SizedBox(height: 6),
+                  w,
+                  pw.SizedBox(height: 4),
+                  _txt(alt, 10, color: PdfColors.grey600),
+                  pw.SizedBox(height: 14),
+                ],
+              ));
+            } else {
+              out.add(pw.Column(children: [
+                pw.SizedBox(height: 6),
+                w,
+                pw.SizedBox(height: 14),
+              ]));
+            }
+            continue;
+          }
+          // 图片加载失败：退回文本占位（不丢信息）
+          out.add(_txt('[图片：$alt] (${path.split('/').last} 加载失败，请在APP中查看原素材)',
+              11, color: PdfColors.red600));
+          out.add(pw.SizedBox(height: 10));
+          continue;
+        }
       }
 
       final atxMatch = atx.firstMatch(line);

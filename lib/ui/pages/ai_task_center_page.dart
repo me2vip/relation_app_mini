@@ -1117,29 +1117,31 @@ class _ExportTabState extends State<_ExportTab> {
       File file;
       String pdfLevel = 'L1';
       String pdfFallbackReport = '';
-      File? mdSidecar;
       try {
         final titleStr = '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}';
-        // 先构建 Markdown 原文侧车文件（分享 PDF 时一并附上，
-        // 即便 L2/L3 内置 Helvetica 把中文变 □，AI 读 .md 也能看完整中文）
-        final prompt = _buildPrompt(data, contactProvider);
-        final attachments = data.getAttachmentDescriptions();
-        final contactsStr = contacts.isEmpty ? null : '${contacts.length}位联系人';
-        final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(DateTime.now());
-        final mdText = PdfExporter.buildMarkdown(
-          title: titleStr,
-          prompt: prompt,
-          contactName: contactsStr,
-          context: data.sourceText,
-          attachments: attachments.isNotEmpty ? attachments : null,
-          dateStr: dateStr,
-        );
-        mdSidecar = await PdfExporter.writeMarkdownSidecar(titleStr, mdText);
+
+        // 构建 attachments 列表：
+        // 1) 先加文字版描述（getAttachmentDescriptions）
+        // 2) 再为**图片素材**追加整行 Markdown 图片引用：![图片N描述](本地绝对路径)
+        //    这样 PdfExporter 自实现 Markdown 解析器会把图片嵌入 PDF 页，
+        //    最终 PDF 里直接包含提示词 + 图片，用户无需理解 md 附件概念。
+        final attachments = <String>[...data.getAttachmentDescriptions()];
+        var imageIdx = 1;
+        for (final a in data.attachments) {
+          if (a.type != MediaType.image) continue;
+          final path = a.filePath;
+          if (path.isEmpty) continue;
+          final desc = (a.description?.trim().isNotEmpty == true)
+              ? a.description!.trim()
+              : a.fileName;
+          attachments.add('![图片素材$imageIdx: $desc]($path)');
+          imageIdx++;
+        }
 
         final result = await PdfExporter.exportExternalAIPdfEx(
           title: titleStr,
           prompt: prompt,
-          contactName: contactsStr,
+          contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
           context: data.sourceText,
           attachments: attachments.isNotEmpty ? attachments : null,
         );
@@ -1167,25 +1169,15 @@ class _ExportTabState extends State<_ExportTab> {
       if (mounted) {
         phase = '调用Share.shareXFiles分享';
         try {
-          // PDF + .md 原文侧车一起分享：
-          // 即便 L2/L3 下 PDF 中文为 □，AI 读 .md 附件也能看到完整 UTF-8 中文
-          final allFiles = <XFile>[XFile(savedPath)];
-          final mc = mdSidecar;
-          if (mc != null && mc.existsSync()) {
-            allFiles.add(XFile(mc.path));
-          }
-          final mdHint = (mc != null)
-              ? '；同附 .md 原文文件，外部AI读 .md 可看到完整中文，无需解析PDF字体'
-              : '';
           final levelHint = (usedFallbackLevel != null)
-              ? '  (PDF采用兼容层级$usedFallbackLevel渲染)$mdHint'
-              : mdHint;
+              ? '  (PDF采用兼容层级$usedFallbackLevel渲染)'
+              : '';
           await Share.shareXFiles(
-            allFiles,
+            [XFile(savedPath)],
             subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
             text:
                 '请将此PDF发送给外部AI（千问/豆包/GPT等），让AI按文档要求生成任务建议$levelHint。'
-                '将AI回复完整复制回APP即可自动保存任务。',
+                'PDF内含提示词及图片素材参考，AI返回完整回复后，将回复全文复制回APP即可自动保存任务。',
           );
         } catch (shareErr, shareSt) {
           final shareReport = '阶段=分享 PDF\n'
