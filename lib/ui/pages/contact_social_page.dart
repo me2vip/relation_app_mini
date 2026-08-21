@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'dart:convert';
 import '../../core/providers/contact_social_provider.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../models/contact.dart';
@@ -603,16 +605,133 @@ class _ContactSocialPageState extends State<ContactSocialPage>
       '日常问候', '近期生活', '工作近况', '兴趣爱好', '共同回忆',
       '未来计划', '情感话题', '热点话题', '美食分享', '旅行见闻',
       '运动健身', '娱乐八卦', '学习成长', '家庭近况', '朋友圈动态',
+      '自我介绍', '共同朋友', '生活趣事', '稳定话题', '深度交流',
+      '职业成长', '行业动态', '合作机会', '资源分享', '娱乐分享',
     ];
     final avoidList = [
       '负面情绪', '敏感话题', '前任', '金钱', '政治', '宗教',
+      '隐私问题', '家庭矛盾', '过去矛盾', '私人八卦', '感情问题',
+      '公开活动', '多人聚会', '演讲发言',
     ];
+    final profileProvider = context.read<ProfileProvider>();
+    final userProfile = profileProvider.profile;
+    final isGenerating = provider.isGeneratingOutline;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ===== AI 生成入口 =====
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF6366F1).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.auto_awesome, color: Colors.white, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'AI 生成社交大纲',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '基于社交航向、关系阶段和你的用户画像，智能生成推荐话题和社交策略。生成后仍可手动修改。',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white, width: 1.2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(Icons.bolt, size: 18),
+                        label: const Text('内部AI生成', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: isGenerating
+                            ? null
+                            : () async {
+                          provider.setGeneratingOutline(true);
+                          try {
+                            await Future.delayed(const Duration(milliseconds: 500));
+                            final result = provider.generateOutlineWithInternalAI(
+                              contact: widget.contact,
+                              social: social,
+                              userProfile: userProfile,
+                            );
+                            await provider.applyGeneratedOutline(
+                              contactId: widget.contact.id,
+                              outlineTopics: List<String>.from(result['outlineTopics']),
+                              avoidTopics: List<String>.from(result['avoidTopics']),
+                              customOutline: result['customOutline'] as String,
+                            );
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('社交大纲已生成 ✓')),
+                              );
+                            }
+                          } finally {
+                            provider.setGeneratingOutline(false);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF6366F1),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('外部AI生成', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: isGenerating
+                            ? null
+                            : () => _showExternalAIOutlineDialog(provider, social),
+                      ),
+                    ),
+                  ],
+                ),
+                if (isGenerating) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(
+                    color: Colors.white,
+                    backgroundColor: Colors.white24,
+                  ),
+                ]
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          // ===== 推荐话题 =====
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
@@ -620,13 +739,24 @@ class _ContactSocialPageState extends State<ContactSocialPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '推荐话题',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Row(
+                    children: const [
+                      Icon(Icons.thumb_up, color: Color(0xFF6366F1), size: 20),
+                      SizedBox(width: 6),
+                      Text(
+                        '推荐话题',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Spacer(),
+                      Tooltip(
+                        message: '可多选，AI生成任务时优先从已选话题入手',
+                        child: Icon(Icons.info_outline, size: 18, color: Colors.grey),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    'AI生成任务时优先考虑的话题方向',
+                    'AI生成任务时优先考虑的话题方向（已选中为你当前的推荐）',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
@@ -666,6 +796,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                             style: TextStyle(
                               color: selected ? const Color(0xFF6366F1) : Colors.black87,
                               fontSize: 12,
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -677,6 +808,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
             ),
           ),
           const SizedBox(height: 16),
+          // ===== 避免话题 =====
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
@@ -684,14 +816,20 @@ class _ContactSocialPageState extends State<ContactSocialPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '避免话题',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Row(
+                    children: const [
+                      Icon(Icons.block, color: Colors.redAccent, size: 20),
+                      SizedBox(width: 6),
+                      Text(
+                        '避免话题',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '与${widget.contact.name}应避免的话题',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                   Wrap(
@@ -726,6 +864,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                             style: TextStyle(
                               color: selected ? Colors.red : Colors.black87,
                               fontSize: 12,
+                              fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                             ),
                           ),
                         ),
@@ -737,6 +876,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
             ),
           ),
           const SizedBox(height: 16),
+          // ===== 自定义大纲 =====
           Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
             child: Padding(
@@ -744,22 +884,30 @@ class _ContactSocialPageState extends State<ContactSocialPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    '自定义大纲',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Row(
+                    children: const [
+                      Icon(Icons.edit_note, color: Color(0xFFF59E0B), size: 22),
+                      SizedBox(width: 6),
+                      Text(
+                        '自定义大纲',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   const Text(
-                    '描述具体的社交计划和大纲',
+                    '描述具体的社交计划和大纲（建议用AI生成后再微调）',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     initialValue: social.customOutline,
-                    maxLines: 5,
+                    maxLines: 10,
+                    minLines: 5,
                     decoration: const InputDecoration(
-                      hintText: '例如：每周聊一次工作近况，每月一起吃饭一次，节日互相问候...',
+                      hintText: '例如：\n• 社交航向：深化关系\n• 关系阶段：朋友 → 好友\n• 执行建议：\n  1. 每周主动聊1-2次\n  2. 优先选择兴趣爱好话题\n  3. 重要日期提前准备心意...',
                       border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
                     ),
                     onChanged: (v) {
                       provider.updateSocial(
@@ -771,6 +919,178 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                 ],
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===== 外部AI生成社交大纲对话框 =====
+  Future<void> _showExternalAIOutlineDialog(
+    ContactSocialProvider provider,
+    ContactSocial social,
+  ) async {
+    final profileProvider = context.read<ProfileProvider>();
+    final userProfile = profileProvider.profile;
+    final prompt = provider.buildExternalAIOutlinePrompt(
+      contact: widget.contact,
+      social: social,
+      userProfile: userProfile,
+    );
+    final pasteController = TextEditingController();
+    final tabController = TabController(length: 2, vsync: this);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.auto_awesome, color: Color(0xFF6366F1)),
+            SizedBox(width: 8),
+            Text('外部AI生成社交大纲'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TabBar(
+                controller: tabController,
+                labelColor: const Color(0xFF6366F1),
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: '① 复制提示词'),
+                  Tab(text: '② 粘贴结果'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(
+                  controller: tabController,
+                  children: [
+                    // ===== Tab 1: 提示词复制 =====
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '将以下内容复制到任意 AI App（千问/豆包/ChatGPT等）：',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: SelectableText(
+                              prompt,
+                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(text: prompt));
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(content: Text('提示词已复制 ✓')),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.copy),
+                              label: const Text('复制提示词'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // ===== Tab 2: 粘贴结果 =====
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '粘贴 AI 返回的 JSON 结果：',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: pasteController,
+                            maxLines: 12,
+                            decoration: const InputDecoration(
+                              hintText: '粘贴AI返回的JSON，例如：\n{\n  "outlineTopics": [...],\n  "avoidTopics": [...],\n  "customOutline": "..."\n}',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final text = pasteController.text.trim();
+              if (text.isEmpty) {
+                tabController.animateTo(1);
+                return;
+              }
+              try {
+                final parsed = jsonDecode(text) as Map<String, dynamic>;
+                final List<String> outlineTopics = (parsed['outlineTopics'] as List?)
+                    ?.map((e) => e.toString()).toList() ?? [];
+                final List<String> avoidTopics = (parsed['avoidTopics'] as List?)
+                    ?.map((e) => e.toString()).toList() ?? [];
+                final String? customOutline = parsed['customOutline'] as String?;
+
+                if (outlineTopics.isEmpty && avoidTopics.isEmpty &&
+                    (customOutline == null || customOutline.isEmpty)) {
+                  throw Exception('内容为空');
+                }
+
+                await provider.applyGeneratedOutline(
+                  contactId: widget.contact.id,
+                  outlineTopics: outlineTopics,
+                  avoidTopics: avoidTopics,
+                  customOutline: customOutline,
+                );
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('社交大纲已应用 ✓')),
+                  );
+                  Navigator.pop(ctx, true);
+                }
+              } catch (e) {
+                showDialog(
+                  context: ctx,
+                  builder: (ctx2) => AlertDialog(
+                    title: const Text('解析失败'),
+                    content: Text('无法解析返回结果，请确认是合法的JSON格式。\n\n错误：$e'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx2),
+                        child: const Text('好的'),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            child: const Text('应用结果'),
           ),
         ],
       ),

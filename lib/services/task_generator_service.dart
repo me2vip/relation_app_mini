@@ -120,24 +120,24 @@ class TaskGeneratorService {
     if (contact.values != null) profile.writeln('价值观：${contact.values}');
     buffer.write(profile.toString());
 
-    // 社交大纲
+    // 社交大纲（已由AI根据社交航向+关系阶段+用户画像生成，用户可已微调）
     if (contactSocial != null) {
       buffer.writeln('');
-      buffer.writeln('## 社交大纲');
+      buffer.writeln('## 社交大纲（已由AI生成并经用户确认）');
       buffer.writeln('- 社交航向: ${contactSocial.directionName}');
       buffer.writeln('- 关系阶段: ${contactSocial.currentStageName} → ${contactSocial.targetStageName}');
       buffer.writeln('- 关系温度: ${contactSocial.warmthLevel}/10');
       if (contactSocial.outlineTopics.isNotEmpty) {
-        buffer.writeln('- 推荐话题: ${contactSocial.outlineTopics.join('、')}');
+        buffer.writeln('- 推荐话题（AI生成+用户勾选）: ${contactSocial.outlineTopics.join('、')}');
       }
       if (contactSocial.avoidTopics.isNotEmpty) {
-        buffer.writeln('- 避免话题: ${contactSocial.avoidTopics.join('、')}');
+        buffer.writeln('- 避免话题（AI生成+用户勾选）: ${contactSocial.avoidTopics.join('、')}');
       }
       if (contactSocial.customOutline != null && contactSocial.customOutline!.isNotEmpty) {
-        buffer.writeln('- 自定义大纲: ${contactSocial.customOutline}');
+        buffer.writeln('- 具体社交大纲（AI生成+用户微调）:\n${contactSocial.customOutline}');
       }
       if (contactSocial.directionNote != null && contactSocial.directionNote!.isNotEmpty) {
-        buffer.writeln('- 航向说明: ${contactSocial.directionNote}');
+        buffer.writeln('- 用户自定义航向说明: ${contactSocial.directionNote}');
       }
     }
 

@@ -3,7 +3,7 @@ description: "社交塔子 - 智能社交搭子助手"
 publish_to: 'none'
 # 版本号唯一来源：x.y.z+build（+后为 Android versionCode），
 # 改一处 → gradle 自动同步（flutter.versionCode / flutter.versionName）
-version: 1.27.6+62
+version: 1.27.7+63
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
