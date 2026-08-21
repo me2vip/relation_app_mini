@@ -727,12 +727,34 @@ class PdfExporter {
         dateStr: dateStr,
       );
 
+      final imageDataList = <_ImageData>[];
+      if (attachments != null) {
+        for (final att in attachments) {
+          if (att.startsWith('![') && att.contains('](')) {
+            final match = RegExp(r'!\[([^\]]*)\]\((.+)\)').firstMatch(att);
+            if (match != null) {
+              final path = (match.group(2) ?? '').trim();
+              final alt = match.group(1) ?? '';
+              if (path.isNotEmpty) {
+                final file = File(path);
+                if (await file.exists()) {
+                  final bytes = await file.readAsBytes();
+                  if (bytes.isNotEmpty) {
+                    imageDataList.add(_ImageData(alt, bytes));
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
       final errors = <String>[];
 
       // L0: 使用 flutter_pdf_export (支持中文，使用 Noto Sans SC 字体)
       try {
         final phase = 'L0_flutter_pdf_export';
-        final file = await _exportWithFlutterPdfExport(title, markdown, now);
+        final file = await _exportWithFlutterPdfExport(title, markdown, now, imageDataList);
         return (
           file: file,
           level: phase,
@@ -790,17 +812,56 @@ class PdfExporter {
   }
 
   static Future<File> _exportWithFlutterPdfExport(
-      String title, String markdown, DateTime now) async {
+      String title, String markdown, DateTime now, List<_ImageData> imageDataList) async {
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
     final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final dir = await getTemporaryDirectory();
     final outputPath = '${dir.path}/$fileName';
 
+    if (imageDataList.isEmpty) {
+      final file = await PdfBuilder.generate(
+        PdfDocumentData.fromMarkdown(
+          title: title,
+          markdown: markdown,
+          style: PdfStyle.light.copyWith(
+            accentColor: PdfColor.fromInt(0xFF0066CC),
+            footerLeftText: '社交塔子 AI任务中心',
+            showPageNumbers: true,
+            bodyFontSize: 13,
+          ),
+        ),
+      );
+      if (file.path != outputPath) {
+        return file.copy(outputPath);
+      }
+      return file;
+    }
+
+    final cleanedMarkdown = markdown.replaceAllMapped(
+      RegExp(r'!\[([^\]]*)\]\(([^)]+)\)'),
+      (m) => '（图片已嵌入：${m.group(1) ?? ''}）',
+    );
+
+    final sections = <PdfSection>[
+      PdfSection.markdown(cleanedMarkdown),
+    ];
+
+    for (final img in imageDataList) {
+      sections.add(
+        PdfSection.image(
+          img.bytes,
+          caption: img.alt.isEmpty ? null : img.alt,
+          widthFraction: 0.85,
+          alignment: 'center',
+        ),
+      );
+    }
+
     final file = await PdfBuilder.generate(
-      PdfDocumentData.fromMarkdown(
+      PdfDocumentData(
         title: title,
-        markdown: markdown,
+        sections: sections,
         style: PdfStyle.light.copyWith(
           accentColor: PdfColor.fromInt(0xFF0066CC),
           footerLeftText: '社交塔子 AI任务中心',
@@ -811,10 +872,8 @@ class PdfExporter {
     );
 
     if (file.path != outputPath) {
-      final savedFile = await file.copy(outputPath);
-      return savedFile;
+      return file.copy(outputPath);
     }
-
     return file;
   }
 
@@ -1166,6 +1225,12 @@ class _ImageEntry {
   _ImageEntry(this.relativePath, this.ext);
 }
 
+class _ImageData {
+  final String alt;
+  final List<int> bytes;
+  _ImageData(this.alt, this.bytes);
+}
+
   static Future<File?> exportImageOnlyPdf({
     required String title,
     List<String>? attachments,
@@ -1192,7 +1257,7 @@ class _ImageEntry {
     final outputPath = '${dir.path}/社交塔子_${safeTitle}_图片素材_$timestamp.pdf';
 
     final pdf = pw.Document();
-    final images = <pw.Widget>[];
+    final imageWidgets = <pw.Widget>[];
 
     for (var i = 0; i < imagePaths.length; i++) {
       try {
@@ -1201,9 +1266,9 @@ class _ImageEntry {
         final bytes = await file.readAsBytes();
         if (bytes.isEmpty) continue;
         final mem = pw.MemoryImage(bytes);
-        images.add(
+        imageWidgets.add(
           pw.Container(
-            margin: const pw.EdgeInsets.only(bottom: 16),
+            margin: const pw.EdgeInsets.only(bottom: 12),
             child: pw.ClipRRect(
               horizontalRadius: 8,
               verticalRadius: 8,
@@ -1219,35 +1284,40 @@ class _ImageEntry {
       } catch (_) {}
     }
 
-    if (images.isEmpty) return null;
+    if (imageWidgets.isEmpty) return null;
 
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        build: (_) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                title,
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-              pw.SizedBox(height: 4),
-              pw.Text(
-                '图片素材 (${imagePaths.length}张)',
-                style: pw.TextStyle(fontSize: 10, color: PdfColors.grey600),
-              ),
-              pw.SizedBox(height: 16),
-              ...images,
-            ],
-          );
-        },
-      ),
-    );
+    const pageMargin = pw.EdgeInsets.all(16);
+    const pageFormat = PdfPageFormat.a4;
+    final usableWidth = pageFormat.width - pageMargin.horizontal;
+
+    if (imageWidgets.length == 1) {
+      pdf.addPage(
+        pw.Page(
+          pageFormat: pageFormat,
+          margin: pageMargin,
+          build: (_) => pw.Center(child: imageWidgets.first),
+        ),
+      );
+    } else {
+      final chunks = <List<pw.Widget>>[];
+      const chunkSize = 4;
+      for (var i = 0; i < imageWidgets.length; i += chunkSize) {
+        final end = (i + chunkSize > imageWidgets.length) ? imageWidgets.length : i + chunkSize;
+        chunks.add(imageWidgets.sublist(i, end));
+      }
+      for (final chunk in chunks) {
+        pdf.addPage(
+          pw.Page(
+            pageFormat: pageFormat,
+            margin: pageMargin,
+            build: (_) => pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
+              children: chunk,
+            ),
+          ),
+        );
+      }
+    }
 
     final file = File(outputPath);
     await file.writeAsBytes(await pdf.save());
