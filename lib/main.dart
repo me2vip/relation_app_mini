@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/providers/app_provider.dart';
 import 'core/providers/contact_provider.dart';
 import 'core/providers/task_provider.dart';
+import 'models/task.dart';
 import 'core/providers/ai_provider.dart';
 import 'core/providers/persona_provider.dart';
 import 'core/providers/channel_provider.dart';
@@ -24,6 +25,7 @@ import 'ui/pages/dynamic_post_page.dart';
 import 'ui/pages/channel_manage_page.dart';
 import 'ui/pages/ai_model_manage_page.dart';
 import 'ui/pages/ai_task_center_page.dart';
+import 'ui/pages/task_detail_page.dart';
 import 'services/notification_service.dart';
 
 // GlobalKey 用于访问 MyApp 状态
@@ -133,6 +135,17 @@ class _MyAppState extends State<MyApp> {
         ),
         themeMode: _isDarkMode ? ThemeMode.dark : ThemeMode.light,
         home: const SplashPage(),
+        onGenerateRoute: (settings) {
+          if (settings.name == '/task-detail') {
+            final task = settings.arguments;
+            if (task is SocialTask) {
+              return MaterialPageRoute(
+                builder: (context) => TaskDetailPage(task: task),
+              );
+            }
+          }
+          return null;
+        },
         routes: {
           '/home': (context) => const HomePage(),
           '/contacts': (context) => const ContactsPage(),

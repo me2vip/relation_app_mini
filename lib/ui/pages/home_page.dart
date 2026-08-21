@@ -855,6 +855,13 @@ class _TasksView extends StatelessWidget {
                         task: tasks[index],
                         onComplete: () => provider.completeTask(tasks[index].id),
                         onSkip: () => provider.skipTask(tasks[index].id),
+                        onTap: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/task-detail',
+                            arguments: tasks[index],
+                          );
+                        },
                       ),
                     );
                   },

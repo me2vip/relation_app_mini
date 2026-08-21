@@ -38,6 +38,7 @@ class SocialTask {
   final DateTime? completedAt;
   final int priority;
   final String? goalRelation;
+  final List<String> steps;
   final Map<String, dynamic>? metadata;
 
   SocialTask({
@@ -52,6 +53,7 @@ class SocialTask {
     this.completedAt,
     this.priority = 0,
     this.goalRelation,
+    this.steps = const [],
     this.metadata,
   });
 
@@ -67,6 +69,7 @@ class SocialTask {
     DateTime? completedAt,
     int? priority,
     String? goalRelation,
+    List<String>? steps,
     Map<String, dynamic>? metadata,
   }) => SocialTask(
     id: id ?? this.id,
@@ -80,6 +83,7 @@ class SocialTask {
     completedAt: completedAt ?? this.completedAt,
     priority: priority ?? this.priority,
     goalRelation: goalRelation ?? this.goalRelation,
+    steps: steps ?? this.steps,
     metadata: metadata ?? this.metadata,
   );
 
@@ -95,25 +99,42 @@ class SocialTask {
     'completedAt': completedAt?.toIso8601String(),
     'priority': priority,
     'goalRelation': goalRelation,
+    'steps': steps,
     'metadata': metadata,
   };
 
-  factory SocialTask.fromJson(Map<String, dynamic> json) => SocialTask(
-    id: json['id'] as String,
-    contactId: json['contactId'] as String,
-    contactName: json['contactName'] as String,
-    title: json['title'] as String,
-    description: json['description'] as String,
-    type: TaskType.values[json['type'] as int],
-    status: TaskStatus.values[json['status'] as int],
-    scheduledAt: DateTime.parse(json['scheduledAt'] as String),
-    completedAt: json['completedAt'] != null 
-        ? DateTime.parse(json['completedAt'] as String) 
-        : null,
-    priority: json['priority'] as int? ?? 0,
-    goalRelation: json['goalRelation'] as String?,
-    metadata: json['metadata'] as Map<String, dynamic>?,
-  );
+  factory SocialTask.fromJson(Map<String, dynamic> json) {
+    final stepsRaw = json['steps'];
+    List<String> stepsList = [];
+    if (stepsRaw != null) {
+      if (stepsRaw is List) {
+        stepsList = stepsRaw.map((e) => e.toString()).toList();
+      } else if (stepsRaw is String) {
+        stepsList = stepsRaw
+            .split(RegExp(r'[\n\r]+'))
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    }
+    return SocialTask(
+      id: json['id'] as String,
+      contactId: json['contactId'] as String,
+      contactName: json['contactName'] as String,
+      title: json['title'] as String,
+      description: json['description'] as String,
+      type: TaskType.values[json['type'] as int],
+      status: TaskStatus.values[json['status'] as int],
+      scheduledAt: DateTime.parse(json['scheduledAt'] as String),
+      completedAt: json['completedAt'] != null 
+          ? DateTime.parse(json['completedAt'] as String) 
+          : null,
+      priority: json['priority'] as int? ?? 0,
+      goalRelation: json['goalRelation'] as String?,
+      steps: stepsList,
+      metadata: json['metadata'] as Map<String, dynamic>?,
+    );
+  }
 
   String get typeName {
     switch (type) {

@@ -408,102 +408,193 @@ class _TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(15),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  _getTypeIcon(task.type),
-                  size: 20,
-                  color: const Color(0xFF6366F1),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    task.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(
+          context,
+          '/task-detail',
+          arguments: task,
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.only(bottom: 10),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _getTypeIcon(task.type),
+                    size: 20,
+                    color: const Color(0xFF6366F1),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      task.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ),
-                ),
-                if (task.contactName.isNotEmpty)
-                  Chip(
-                    label: Text(
-                      task.contactName,
-                      style: const TextStyle(fontSize: 12),
+                  if (task.contactName.isNotEmpty)
+                    Chip(
+                      label: Text(
+                        task.contactName,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      padding: EdgeInsets.zero,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    padding: EdgeInsets.zero,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-              ],
-            ),
-            if (task.description.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                task.description,
-                style: const TextStyle(color: Colors.grey),
+                ],
               ),
-            ],
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule,
-                      size: 16,
-                      color: Colors.grey[600],
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      DateFormat('HH:mm').format(task.scheduledAt),
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                    if (task.goalRelation != null) ...[
-                      const SizedBox(width: 15),
+              if (task.description.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(
+                  task.description,
+                  style: const TextStyle(color: Colors.grey),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+              if (task.steps.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _buildStepsPreview(),
+              ],
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
                       Icon(
-                        Icons.flag,
+                        Icons.schedule,
                         size: 16,
                         color: Colors.grey[600],
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        task.goalRelation!,
+                        DateFormat('HH:mm').format(task.scheduledAt),
                         style: TextStyle(color: Colors.grey[600]),
                       ),
-                    ],
-                  ],
-                ),
-                if (task.status == TaskStatus.pending)
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.check_circle_outline),
-                        color: Colors.green,
-                        onPressed: () {
-                          context.read<TaskProvider>().completeTask(task.id);
-                        },
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.skip_next),
-                        color: Colors.orange,
-                        onPressed: () {
-                          context.read<TaskProvider>().skipTask(task.id);
-                        },
-                      ),
+                      if (task.goalRelation != null) ...[
+                        const SizedBox(width: 15),
+                        Icon(
+                          Icons.flag,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          task.goalRelation!,
+                          style: TextStyle(color: Colors.grey[600]),
+                        ),
+                      ],
                     ],
                   ),
-              ],
-            ),
-          ],
+                  if (task.status == TaskStatus.pending)
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.check_circle_outline),
+                          color: Colors.green,
+                          onPressed: () {
+                            context.read<TaskProvider>().completeTask(task.id);
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.skip_next),
+                          color: Colors.orange,
+                          onPressed: () {
+                            context.read<TaskProvider>().skipTask(task.id);
+                          },
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildStepsPreview() {
+    final displaySteps = task.steps.length > 2 ? task.steps.sublist(0, 2) : task.steps;
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.purple.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.purple.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.flag, size: 12, color: Colors.purple),
+              const SizedBox(width: 4),
+              Text(
+                '${task.steps.length}个执行步骤',
+                style: const TextStyle(fontSize: 11, color: Colors.purple),
+              ),
+              const Spacer(),
+              const Icon(Icons.chevron_right, size: 14, color: Colors.purple),
+            ],
+          ),
+          const SizedBox(height: 6),
+          ...displaySteps.asMap().entries.map((entry) {
+            final index = entry.key;
+            return Padding(
+              padding: EdgeInsets.only(bottom: index < displaySteps.length - 1 ? 4 : 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 16,
+                    height: 16,
+                    decoration: const BoxDecoration(
+                      color: Colors.purple,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${index + 1}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (task.steps.length > 2)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '还有${task.steps.length - 2}个步骤...',
+                style: const TextStyle(fontSize: 11, color: Colors.purple),
+              ),
+            ),
+        ],
       ),
     );
   }

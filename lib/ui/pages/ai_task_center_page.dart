@@ -955,10 +955,14 @@ class _PromptPreviewCard extends StatelessWidget {
     buffer.writeln('      "priority": 1-5,');
     buffer.writeln('      "scheduled_offset_days": 0-30,');
     buffer.writeln('      "scheduled_hour": 8-21');
+    buffer.writeln('      "steps": ["步骤1的具体执行指导", "步骤2的具体执行指导", ...]');
     buffer.writeln('    }');
     buffer.writeln('  ]');
     buffer.writeln('}');
     buffer.writeln('```');
+    buffer.writeln('');
+    buffer.writeln('重要：每个任务必须包含steps字段，列出3-5个具体可执行的步骤指导。');
+    buffer.writeln('步骤指导要具体，包含要说的话、要做的动作、注意事项等。');
     return buffer.toString();
   }
 
@@ -1093,10 +1097,14 @@ class _ExportTabState extends State<_ExportTab> {
     buffer.writeln('      "priority": 1-5,');
     buffer.writeln('      "scheduled_offset_days": 0-30,');
     buffer.writeln('      "scheduled_hour": 8-21');
+    buffer.writeln('      "steps": ["步骤1的具体执行指导", "步骤2的具体执行指导", ...]');
     buffer.writeln('    }');
     buffer.writeln('  ]');
     buffer.writeln('}');
     buffer.writeln('```');
+    buffer.writeln('');
+    buffer.writeln('重要：每个任务必须包含steps字段，列出3-5个具体可执行的步骤指导。');
+    buffer.writeln('步骤指导要具体，包含要说的话、要做的动作、注意事项等。');
     return buffer.toString();
   }
 
@@ -1112,7 +1120,8 @@ class _ExportTabState extends State<_ExportTab> {
     buffer.writeln('2. 分析每位联系人的特点和关系阶段');
     buffer.writeln('3. 为每位联系人生成${data.getDaysText()}内的社交任务建议');
     buffer.writeln('4. 严格按照PDF中的JSON格式返回结果');
-    buffer.writeln('5. 每个任务包含：联系人姓名、任务标题、详细描述、任务类型、优先级(1-5)、建议执行天数和时间');
+    buffer.writeln('5. 每个任务必须包含：联系人姓名、任务标题、详细描述、任务类型、优先级(1-5)、建议执行天数和时间');
+    buffer.writeln('6. 每个任务必须包含steps字段，提供3-5个具体可执行的步骤指导');
     buffer.writeln('');
     buffer.writeln('请确保输出是完整的JSON格式，方便后续解析。');
     return buffer.toString();
@@ -1750,6 +1759,35 @@ class _PasteResultTabState extends State<_PasteResultTab> {
     return null;
   }
 
+  List<String> _extractSteps(dynamic raw) {
+    if (raw == null) return [];
+    if (raw is List) {
+      return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (raw is String) {
+      final cleaned = raw.trim();
+      if (cleaned.isEmpty) return [];
+      if (cleaned.startsWith('[') || cleaned.startsWith('[')) {
+        try {
+          final listStr = cleaned.substring(cleaned.indexOf('[') + 1, cleaned.lastIndexOf(']'));
+          final parts = listStr.split(',');
+          return parts.map((e) {
+            var s = e.trim();
+            if (s.startsWith('"')) s = s.substring(1);
+            if (s.endsWith('"')) s = s.substring(0, s.length - 1);
+            return s;
+          }).where((e) => e.isNotEmpty).toList();
+        } catch (_) {}
+      }
+      return cleaned
+          .split(RegExp(r'[\n\r]+'))
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return [];
+  }
+
   List<SocialTask> _parseAIImage(String aiResponse) {
     final uuid = const Uuid();
     final contactProvider = context.read<ContactProvider>();
@@ -1844,6 +1882,8 @@ class _PasteResultTabState extends State<_PasteResultTab> {
         0,
       );
 
+      final steps = _extractSteps(taskData['steps']);
+
       tasks.add(SocialTask(
         id: uuid.v4(),
         contactId: contact?.id ?? '',
@@ -1856,6 +1896,7 @@ class _PasteResultTabState extends State<_PasteResultTab> {
         scheduledAt: scheduledAt,
         priority: priority,
         goalRelation: contact?.goalRelation,
+        steps: steps,
       ));
     }
 
