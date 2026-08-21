@@ -91,18 +91,14 @@ class PdfExporter {
   }
 
   /// 构造 ThemeData：
-  /// - 找到中文字体：base/bold/italic/boldItalic 全部指向同一个实例，
-  ///   避免 pdf 库内部合成 bold/italic 子集时触发 ! 断言。
+  /// - 找到中文字体：只传 base，**故意不传 bold/italic/boldItalic**，
+  ///   避免 pdf 库内部做 4 字体交叉检查（pdf 3.13 内部有 ! 断言）。
+  ///   TextStyle 在需要时显式设置 font: _chineseFont（_ts 已处理）。
   /// - 否则退回 ThemeData.withFont() 全空，pdf 使用内置 Helvetica。
   static pw.ThemeData _buildTheme() {
     final f = _chineseFont;
     if (f == null) return pw.ThemeData.withFont();
-    return pw.ThemeData.withFont(
-      base: f,
-      bold: f,
-      italic: f,
-      boldItalic: f,
-    );
+    return pw.ThemeData.withFont(base: f);
   }
 
   // ==================================================================
@@ -446,78 +442,88 @@ class PdfExporter {
     String? context,
     List<String>? attachments,
   }) async {
-    final now = DateTime.now();
-    final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
+    // 最外层再统一包一次：任何"漏掉"的异常（例如 L1/L2/L3 内部 try/catch 都没接住时），
+    // 全部重新包装成「三次导出均失败」+ 总堆栈，保证 UI 层拿到的都是合并报告，
+    // SnackBar 一定出现复制崩溃报告按钮。
+    try {
+      final now = DateTime.now();
+      final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
 
-    final markdown = _buildMarkdown(
-      title: title,
-      prompt: prompt,
-      contactName: contactName,
-      context: context,
-      attachments: attachments,
-      dateStr: dateStr,
-    );
+      final markdown = _buildMarkdown(
+        title: title,
+        prompt: prompt,
+        contactName: contactName,
+        context: context,
+        attachments: attachments,
+        dateStr: dateStr,
+      );
 
-    final errors = <String>[];
+      final errors = <String>[];
 
-    for (var attempt = 1; attempt <= 3; attempt++) {
-      final phase = 'L$attempt';
-      try {
-        pw.ThemeData theme;
-        if (attempt == 1) {
-          try {
-            await _scanAndLoadFonts();
-          } catch (_) {}
-          theme = _buildTheme();
-          final widgets = _renderMarkdown(markdown);
-          final f = await _saveWidgetsToPdf(title, now, widgets, theme);
-          return (
-            file: f,
-            level: phase,
-            fallbackReport: errors.join('\n'),
-          );
-        } else if (attempt == 2) {
-          theme = pw.ThemeData.withFont();
-          _chineseFont = null;
-          final widgets = _renderMarkdown(markdown);
-          final f = await _saveWidgetsToPdf(title, now, widgets, theme);
-          return (
-            file: f,
-            level: phase,
-            fallbackReport: errors.join('\n'),
-          );
-        } else {
-          theme = pw.ThemeData.withFont();
-          _chineseFont = null;
-          final bytes = await _renderPlainTextFallback(
-            title,
-            prompt,
-            contactName,
-            context,
-            attachments,
-            dateStr,
-            theme,
-          );
-          final f = await _writePdfFile(title, now, bytes);
-          return (
-            file: f,
-            level: phase,
-            fallbackReport: errors.join('\n'),
-          );
+      for (var attempt = 1; attempt <= 3; attempt++) {
+        final phase = 'L$attempt';
+        try {
+          pw.ThemeData theme;
+          if (attempt == 1) {
+            try {
+              await _scanAndLoadFonts();
+            } catch (_) {}
+            theme = _buildTheme();
+            final widgets = _renderMarkdown(markdown);
+            final f = await _saveWidgetsToPdf(title, now, widgets, theme);
+            return (
+              file: f,
+              level: phase,
+              fallbackReport: errors.join('\n'),
+            );
+          } else if (attempt == 2) {
+            theme = pw.ThemeData.withFont();
+            _chineseFont = null;
+            final widgets = _renderMarkdown(markdown);
+            final f = await _saveWidgetsToPdf(title, now, widgets, theme);
+            return (
+              file: f,
+              level: phase,
+              fallbackReport: errors.join('\n'),
+            );
+          } else {
+            theme = pw.ThemeData.withFont();
+            _chineseFont = null;
+            final bytes = await _renderPlainTextFallback(
+              title,
+              prompt,
+              contactName,
+              context,
+              attachments,
+              dateStr,
+              theme,
+            );
+            final f = await _writePdfFile(title, now, bytes);
+            return (
+              file: f,
+              level: phase,
+              fallbackReport: errors.join('\n'),
+            );
+          }
+        } catch (e, st) {
+          final line = _formatError(phase, e, st);
+          errors.add(line);
+          // ignore: avoid_print
+          print('[PdfExporter] 尝试$phase失败: $line');
+          if (attempt == 3) {
+            final merged = errors.join('\n');
+            throw StateError('三次导出均失败\n$merged');
+          }
+          await Future<void>.delayed(Duration.zero);
         }
-      } catch (e, st) {
-        final line = _formatError(phase, e, st);
-        errors.add(line);
-        // ignore: avoid_print
-        print('[PdfExporter] 尝试$phase失败: $line');
-        if (attempt == 3) {
-          final merged = errors.join('\n');
-          throw StateError('三次导出均失败\n$merged');
-        }
-        await Future<void>.delayed(Duration.zero);
       }
+      throw StateError('PDF导出失败: 未知错误');
+    } catch (e, st) {
+      // 二次兜底：若 for 循环外、入口处的未捕获异常也在此合并
+      if (e is StateError && e.message.startsWith('三次导出均失败')) rethrow;
+      final extra = _formatError('GLOBAL', e, st);
+      throw StateError('三次导出均失败(global catch)\n$extra');
     }
-    throw StateError('PDF导出失败: 未知错误');
   }
 
   /// 兼容旧签名：内部调用扩展版
@@ -547,25 +553,53 @@ class PdfExporter {
     final pdf = pw.Document(theme: theme);
     const chunkSize = 60;
     final chunks = <List<pw.Widget>>[];
-    for (var i = 0; i < widgets.length; i += chunkSize) {
-      chunks.add(widgets.sublist(
-          i, i + chunkSize > widgets.length ? widgets.length : i + chunkSize));
+    // widgets 允许为空（至少塞一个 SizedBox，避免 pdf 库极端空断言）
+    if (widgets.isEmpty) {
+      chunks.add([pw.SizedBox.shrink()]);
+    } else {
+      for (var i = 0; i < widgets.length; i += chunkSize) {
+        final end = i + chunkSize;
+        chunks.add(widgets.sublist(i, end > widgets.length ? widgets.length : end));
+      }
     }
-    if (chunks.isEmpty) chunks.add([pw.SizedBox.shrink()]);
+
+    // 每一页独立 try/catch + save 时 subsetFonts: false
+    // （最关键：关闭字体子集化，DroidSansFallback 等系统字体的 cmap/OS-2
+    //  表和 pdf 库 subset 解析假设不完全匹配，很容易触发内部 ! 断言。
+    //  关闭 subset 后嵌入完整 ttf（文件稍大，但绝不会炸 subset）。）
     for (final chunk in chunks) {
-      pdf.addPage(
-        pw.Page(
-          theme: theme,
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (_) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: chunk,
+      try {
+        pdf.addPage(
+          pw.Page(
+            theme: theme,
+            pageFormat: PdfPageFormat.a4,
+            margin: const pw.EdgeInsets.all(40),
+            build: (_) {
+              try {
+                return pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: chunk,
+                );
+              } catch (_) {
+                return pw.Column(children: [pw.SizedBox.shrink()]);
+              }
+            },
           ),
-        ),
-      );
+        );
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('[PdfExporter] addPage失败，继续空页: $e\n$st');
+        try {
+          pdf.addPage(pw.Page(
+            theme: theme,
+            pageFormat: PdfPageFormat.a4,
+            build: (_) => pw.Text('(此页渲染失败)'),
+          ));
+        } catch (_) {}
+      }
     }
-    final bytes = await pdf.save();
+
+    final bytes = await pdf.save(subsetFonts: false);
     return _writePdfFile(title, now, bytes);
   }
 
@@ -661,18 +695,33 @@ class PdfExporter {
     ]);
 
     final pdf = pw.Document(theme: theme);
-    pdf.addPage(
-      pw.Page(
-        theme: theme,
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
-        build: (_) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: children,
+    try {
+      pdf.addPage(
+        pw.Page(
+          theme: theme,
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (_) {
+            try {
+              return pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: children,
+              );
+            } catch (_) {
+              return pw.Column(
+                children: [pw.Text('(此页渲染失败，请查看APP原始文本提示词)')],
+              );
+            }
+          },
         ),
-      ),
-    );
-    return pdf.save();
+      );
+    } catch (e, st) {
+      // ignore: avoid_print
+      print('[PdfExporter L3] addPage失败，尝试最小空页: $e\n$st');
+      pdf.addPage(pw.Page(build: (_) => pw.Text('fallback')));
+    }
+    // 关键点：关闭 subsetFonts，避免字体子集化触发系统字体 cmap !断言
+    return pdf.save(subsetFonts: false);
   }
 
   static Future<void> sharePdf(File pdfFile) async {
