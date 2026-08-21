@@ -166,11 +166,11 @@ class PdfExporter {
     }
 
     void flushList() {
-      if (listBuffer.isEmpty || listLevel == null) return;
-      final level = listLevel!;
+      final lv = listLevel;
+      if (listBuffer.isEmpty || lv == null) return;
       final children = <pw.Widget>[];
       for (var i = 0; i < listBuffer.length; i++) {
-        final bullet = level == 1 ? '${i + 1}. ' : '• ';
+        final bullet = lv == 1 ? '${i + 1}. ' : '• ';
         children.add(
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -252,8 +252,16 @@ class PdfExporter {
       if (atxMatch != null) {
         flushPara();
         flushList();
-        final level = atxMatch.group(1)!.length;
-        final text = atxMatch.group(2)!.trim();
+        final g1 = atxMatch.group(1);
+        final g2 = atxMatch.group(2);
+        if (g1 == null || g2 == null) {
+          // 当做普通段落
+          if (paraBuffer.isNotEmpty) paraBuffer.write(' ');
+          paraBuffer.write(line.trim());
+          continue;
+        }
+        final level = g1.length;
+        final text = g2.trim();
         late double size;
         double height = 1.3;
         switch (level) {
@@ -282,18 +290,24 @@ class PdfExporter {
       final ord = ordered.firstMatch(line);
       if (ord != null) {
         flushPara();
-        if (listLevel != 1) flushList();
-        listLevel = 1;
-        listBuffer.add(ord.group(1)!.trim());
+        final g = ord.group(1);
+        if (g != null) {
+          if (listLevel != 1) flushList();
+          listLevel = 1;
+          listBuffer.add(g.trim());
+        }
         continue;
       }
 
       final unord = unordered.firstMatch(line);
       if (unord != null) {
         flushPara();
-        if (listLevel != 2) flushList();
-        listLevel = 2;
-        listBuffer.add(unord.group(1)!.trim());
+        final g = unord.group(1);
+        if (g != null) {
+          if (listLevel != 2) flushList();
+          listLevel = 2;
+          listBuffer.add(g.trim());
+        }
         continue;
       }
 
@@ -301,12 +315,15 @@ class PdfExporter {
       if (q != null) {
         flushPara();
         flushList();
-        final content = StringBuffer(q.group(1)!);
-        while (i + 1 < lines.length && quote.hasMatch(lines[i + 1])) {
+        final first = q.group(1) ?? '';
+        final content = StringBuffer(first);
+        while (i + 1 < lines.length) {
+          final next = lines[i + 1];
+          final nq = quote.firstMatch(next);
+          if (nq == null) break;
           i++;
-          final n = quote.firstMatch(lines[i])!;
           content.writeln();
-          content.write(n.group(1)!);
+          content.write(nq.group(1) ?? '');
         }
         out.add(
           pw.Container(

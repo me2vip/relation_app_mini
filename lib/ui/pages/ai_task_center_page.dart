@@ -1096,7 +1096,9 @@ class _ExportTabState extends State<_ExportTab> {
 
   Future<void> _exportAndShare() async {
     setState(() => _isExporting = true);
+    String phase = '初始化';
     try {
+      phase = '读取Provider与联系人';
       final data = context.read<_TaskCenterData>();
       final contactProvider = context.read<ContactProvider>();
       final contacts = data.contactIds
@@ -1105,9 +1107,11 @@ class _ExportTabState extends State<_ExportTab> {
           .whereType<Contact>()
           .toList();
 
+      phase = '组装Prompt与附件描述';
       final prompt = _buildPrompt(data, contactProvider);
       final attachments = data.getAttachmentDescriptions();
 
+      phase = '调用PdfExporter.exportExternalAIPdf生成PDF';
       final file = await PdfExporter.exportExternalAIPdf(
         title: '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
         prompt: prompt,
@@ -1115,23 +1119,26 @@ class _ExportTabState extends State<_ExportTab> {
         context: data.sourceText,
         attachments: attachments.isNotEmpty ? attachments : null,
       );
-
+      phase = '保存PDF路径到状态';
       final savedPath = file.path;
       setState(() => _pdfPath = savedPath);
 
       if (mounted) {
+        phase = '调用Share.shareXFiles分享';
         try {
           await Share.shareXFiles(
             [XFile(savedPath)],
             subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
             text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议',
           );
-        } catch (shareErr) {
+        } catch (shareErr, shareSt) {
           // 分享失败不影响PDF已生成的状态
+          // ignore: avoid_print
+          print('[PDF分享失败] $shareErr\n$shareSt');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('PDF已保存，但分享失败: $shareErr'),
+                content: Text('PDF已保存(${savedPath.split('/').last})，但分享失败: $shareErr'),
                 duration: const Duration(seconds: 3),
                 behavior: SnackBarBehavior.floating,
               ),
@@ -1143,11 +1150,11 @@ class _ExportTabState extends State<_ExportTab> {
       if (mounted) {
         final msg = e.toString();
         // ignore: avoid_print
-        print('[PDF导出异常] $msg\n$stackTrace');
+        print('[PDF导出异常阶段=$phase] $msg\n$stackTrace');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败: $msg'),
-            duration: const Duration(seconds: 4),
+            content: Text('导出失败[$phase]: $msg'),
+            duration: const Duration(seconds: 6),
             behavior: SnackBarBehavior.floating,
           ),
         );
