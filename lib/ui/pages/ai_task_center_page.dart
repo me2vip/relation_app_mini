@@ -9,9 +9,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/services.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/contact_provider.dart';
+import '../../core/providers/profile_provider.dart';
+import '../../core/providers/contact_social_provider.dart';
 import '../../core/utils/pdf_exporter.dart';
 import '../../models/task.dart';
 import '../../models/contact.dart';
+import '../../models/user_profile.dart';
+import '../../models/contact_social.dart';
 
 enum MediaType { image, video, audio, file }
 
@@ -1052,20 +1056,31 @@ class _ExportTabState extends State<_ExportTab> {
         .whereType<Contact>()
         .toList();
 
-    final contactsInfo = contacts.isEmpty
-        ? '所有联系人'
-        : contacts.map((c) {
-            final parts = [
-              c.name,
-              c.levelName,
-              if (c.goalRelation != null) '目标:${c.goalRelation}',
-            ];
-            return '  - ${parts.join(' · ')}';
-          }).join('\n');
+    final profileProvider = context.read<ProfileProvider>();
+    final socialProvider = context.read<ContactSocialProvider>();
+    final userProfile = profileProvider.profile;
 
     final buffer = StringBuffer();
-    buffer.writeln('请根据以下素材，为选定的联系人生成未来 ${data.getDaysText()} 的社交任务计划。');
+    buffer.writeln('请根据以下素材和用户画像，为选定的联系人生成未来 ${data.getDaysText()} 的社交任务计划。');
     buffer.writeln('');
+
+    // ===== 用户画像 =====
+    if (userProfile != null) {
+      buffer.writeln('## 用户画像（任务执行者）');
+      buffer.writeln('- 性格特征: ${userProfile.personalityTraits.join('、')}');
+      buffer.writeln('- 沟通风格: ${userProfile.communicationStyle}');
+      buffer.writeln('- 社交能量: ${userProfile.socialEnergy}/100');
+      buffer.writeln('- 发短信意愿: ${userProfile.opennessToTexting}/5');
+      buffer.writeln('- 打电话意愿: ${userProfile.opennessToCalling}/5');
+      buffer.writeln('- 见面意愿: ${userProfile.opennessToMeeting}/5');
+      buffer.writeln('- 状态标签: ${userProfile.statusTags.join('、')}');
+      buffer.writeln('- 社交目标: ${userProfile.relationshipGoal}');
+      buffer.writeln('');
+      buffer.writeln('注意：生成的任务应匹配用户画像，社恐用户建议以文字交流为主，能量低时建议轻松社交。');
+      buffer.writeln('');
+    }
+
+    // ===== 素材内容 =====
     buffer.writeln('## 素材内容');
     buffer.writeln(data.sourceText.isEmpty ? '（暂无素材）' : data.sourceText);
     if (data.attachments.isNotEmpty) {
@@ -1076,52 +1091,114 @@ class _ExportTabState extends State<_ExportTab> {
       }
     }
     buffer.writeln('');
-    buffer.writeln('## 目标联系人');
-    buffer.writeln(contactsInfo);
+
+    // ===== 目标联系人（含社交大纲）=====
+    buffer.writeln('## 目标联系人（含社交大纲）');
+    if (contacts.isEmpty) {
+      buffer.writeln('所有联系人');
+    } else {
+      for (final c in contacts) {
+        final social = socialProvider.getSocial(c.id);
+        final parts = <String>[
+          c.name,
+          c.levelName,
+          if (c.goalRelation != null) '目标:${c.goalRelation}',
+          '社交航向:${social.directionName}',
+          '关系阶段:${social.currentStageName}→${social.targetStageName}',
+          '关系温度:${social.warmthLevel}/10',
+        ];
+        if (social.outlineTopics.isNotEmpty) {
+          parts.add('推荐话题:${social.outlineTopics.join('、')}');
+        }
+        if (social.avoidTopics.isNotEmpty) {
+          parts.add('避免话题:${social.avoidTopics.join('、')}');
+        }
+        if (social.customOutline != null && social.customOutline!.isNotEmpty) {
+          parts.add('自定义大纲:${social.customOutline}');
+        }
+        if (social.directionNote != null && social.directionNote!.isNotEmpty) {
+          parts.add('航向说明:${social.directionNote}');
+        }
+        buffer.writeln('  - ${parts.join(' · ')}');
+
+        final logs = socialProvider.getLogsForContact(c.id);
+        if (logs.isNotEmpty) {
+          buffer.writeln('    近期互动记录:');
+          for (final log in logs.take(3)) {
+            buffer.writeln('      [${log.sourceName}] ${log.title} (${log.emotionalToneEmoji}${log.emotionalTone ?? '中性'})');
+          }
+        }
+      }
+    }
     buffer.writeln('');
+
     if (data.instructionText.isNotEmpty) {
       buffer.writeln('## 额外要求');
       buffer.writeln(data.instructionText);
       buffer.writeln('');
     }
-    buffer.writeln('## 输出要求');
-    buffer.writeln('请为每位联系人生成具体可执行的社交任务，用JSON格式返回：');
+
+    buffer.writeln('## 任务生成要求');
+    buffer.writeln('请结合用户画像和每位联系人的社交大纲，生成具体可执行的社交任务。');
+    buffer.writeln('任务内容应细化为可执行的大纲，包括：');
+    buffer.writeln('1. 开场白建议（匹配用户沟通风格）');
+    buffer.writeln('2. 话题切入点（参考推荐话题，避开避免话题）');
+    buffer.writeln('3. 互动方式建议（文字/语音/见面，匹配用户社交意愿）');
+    buffer.writeln('4. 关系推进策略（匹配社交航向和关系阶段）');
+    buffer.writeln('');
+    buffer.writeln('## 输出格式（JSON）');
     buffer.writeln('```json');
     buffer.writeln('{');
     buffer.writeln('  "tasks": [');
     buffer.writeln('    {');
     buffer.writeln('      "contact_name": "联系人姓名",');
     buffer.writeln('      "title": "任务标题",');
-    buffer.writeln('      "description": "任务详细描述",');
+    buffer.writeln('      "description": "任务详细描述（包含开场白、话题切入点、注意事项）",');
     buffer.writeln('      "type": "sendMessage|greeting|phoneCall|socialInteraction|other",');
     buffer.writeln('      "priority": 1-5,');
     buffer.writeln('      "scheduled_offset_days": 0-30,');
-    buffer.writeln('      "scheduled_hour": 8-21');
+    buffer.writeln('      "scheduled_hour": 8-21,');
     buffer.writeln('      "steps": ["步骤1的具体执行指导", "步骤2的具体执行指导", ...]');
     buffer.writeln('    }');
     buffer.writeln('  ]');
     buffer.writeln('}');
     buffer.writeln('```');
     buffer.writeln('');
-    buffer.writeln('重要：每个任务必须包含steps字段，列出3-5个具体可执行的步骤指导。');
-    buffer.writeln('步骤指导要具体，包含要说的话、要做的动作、注意事项等。');
+    buffer.writeln('重要规则：');
+    buffer.writeln('1. 每个任务必须包含steps字段，列出3-5个具体可执行的步骤指导');
+    buffer.writeln('2. 步骤指导要具体，包含要说的话、要做的动作、注意事项等');
+    buffer.writeln('3. 任务必须符合用户画像（社恐→文字交流为主，能量低→轻松社交）');
+    buffer.writeln('4. 任务必须遵循联系人的社交大纲（推荐话题、避免话题、社交航向）');
+    buffer.writeln('5. 任务频率应匹配关系温度和阶段');
     return buffer.toString();
   }
 
   String _getAiExecutionPrompt() {
     final data = context.read<_TaskCenterData>();
+    final profileProvider = context.read<ProfileProvider>();
+    final userProfile = profileProvider.profile;
     final buffer = StringBuffer();
     buffer.writeln('【复制以下内容，发送给AI】');
     buffer.writeln('');
     buffer.writeln('请按照我发送的PDF文档要求执行任务。');
     buffer.writeln('');
+    buffer.writeln('用户画像参考:');
+    if (userProfile != null) {
+      buffer.writeln('- 性格: ${userProfile.personalityTraits.join('、')}');
+      buffer.writeln('- 沟通风格: ${userProfile.communicationStyle}');
+      buffer.writeln('- 社交能量: ${userProfile.socialEnergy}/100');
+      buffer.writeln('- 发短信意愿: ${userProfile.opennessToTexting}/5');
+      buffer.writeln('- 见面意愿: ${userProfile.opennessToMeeting}/5');
+    }
+    buffer.writeln('');
     buffer.writeln('具体要求：');
     buffer.writeln('1. 阅读PDF文档中的所有素材和指令');
-    buffer.writeln('2. 分析每位联系人的特点和关系阶段');
+    buffer.writeln('2. 结合用户画像和联系人社交大纲进行分析');
     buffer.writeln('3. 为每位联系人生成${data.getDaysText()}内的社交任务建议');
-    buffer.writeln('4. 严格按照PDF中的JSON格式返回结果');
-    buffer.writeln('5. 每个任务必须包含：联系人姓名、任务标题、详细描述、任务类型、优先级(1-5)、建议执行天数和时间');
-    buffer.writeln('6. 每个任务必须包含steps字段，提供3-5个具体可执行的步骤指导');
+    buffer.writeln('4. 任务应匹配用户性格（社恐→文字交流，能量低→轻松社交）');
+    buffer.writeln('5. 遵循联系人的推荐话题，避开避免话题');
+    buffer.writeln('6. 严格按照PDF中的JSON格式返回结果');
+    buffer.writeln('7. 每个任务必须包含steps字段，提供3-5个具体可执行的步骤指导');
     buffer.writeln('');
     buffer.writeln('请确保输出是完整的JSON格式，方便后续解析。');
     return buffer.toString();

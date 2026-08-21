@@ -26,6 +26,10 @@ import 'ui/pages/channel_manage_page.dart';
 import 'ui/pages/ai_model_manage_page.dart';
 import 'ui/pages/ai_task_center_page.dart';
 import 'ui/pages/task_detail_page.dart';
+import 'ui/pages/user_profile_page.dart';
+import 'ui/pages/contact_social_page.dart';
+import 'core/providers/profile_provider.dart';
+import 'core/providers/contact_social_provider.dart';
 import 'services/notification_service.dart';
 
 // GlobalKey 用于访问 MyApp 状态
@@ -83,6 +87,8 @@ class _MyAppState extends State<MyApp> {
         ChangeNotifierProvider(create: (_) => AIProvider()),
         ChangeNotifierProvider(create: (_) => PersonaProvider()),
         ChangeNotifierProvider(create: (_) => ChannelProvider()),
+        ChangeNotifierProvider(create: (_) => ProfileProvider()),
+        ChangeNotifierProvider(create: (_) => ContactSocialProvider()),
       ],
       child: MaterialApp(
         title: '社交塔子',
@@ -144,6 +150,14 @@ class _MyAppState extends State<MyApp> {
               );
             }
           }
+          if (settings.name == '/contact-social') {
+            final contact = settings.arguments;
+            if (contact is Contact) {
+              return MaterialPageRoute(
+                builder: (context) => ContactSocialPage(contact: contact),
+              );
+            }
+          }
           return null;
         },
         routes: {
@@ -163,6 +177,7 @@ class _MyAppState extends State<MyApp> {
           '/channels': (context) => const ChannelManagePage(),
           '/ai-models': (context) => const AIModelManagePage(),
           '/ai-task-center': (context) => const AiTaskCenterPage(),
+          '/user-profile': (context) => const UserProfilePage(),
         },
       ),
     );

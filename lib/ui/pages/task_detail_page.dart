@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/task_provider.dart';
+import '../../core/providers/profile_provider.dart';
 import '../../models/task.dart';
 
 class TaskDetailPage extends StatefulWidget {
@@ -553,7 +554,14 @@ class _TaskDetailPageState extends State<TaskDetailPage> {
 
   void _markComplete() {
     final taskProvider = context.read<TaskProvider>();
+    final profileProvider = context.read<ProfileProvider>();
     taskProvider.completeTask(widget.task.id);
+    profileProvider.updateProfileFromTask(
+      completed: true,
+      taskType: widget.task.type,
+      reason: '任务完成: ${widget.task.title}',
+    );
+    profileProvider.incrementInteractions();
     Navigator.pop(context);
   }
 

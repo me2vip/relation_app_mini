@@ -4,12 +4,15 @@ import 'package:share_plus/share_plus.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/ai_provider.dart';
+import '../../core/providers/profile_provider.dart';
+import '../../core/providers/contact_social_provider.dart';
 import '../../core/utils/pdf_exporter.dart';
 import '../../models/contact.dart';
 import '../../models/task.dart';
 import '../../models/ai_config.dart';
 import 'package:intl/intl.dart';
 import 'contact_edit_page.dart';
+import 'contact_social_page.dart';
 
 class ContactDetailPage extends StatefulWidget {
   const ContactDetailPage({super.key});
@@ -647,10 +650,19 @@ Future<void> _generateWithInternalAI(
   
   try {
     final taskProvider = context.read<TaskProvider>();
+    final profileProvider = context.read<ProfileProvider>();
+    final socialProvider = context.read<ContactSocialProvider>();
+    
+    final social = socialProvider.getSocial(contact.id);
+    final logs = socialProvider.getLogsForContact(contact.id);
+    
     await taskProvider.generateTasksForContact(
       contact: contact,
       model: selectedModel,
       days: 7,
+      userProfile: profileProvider.profile,
+      contactSocial: social,
+      interactionLogs: logs,
     );
     
     if (context.mounted) {
@@ -676,7 +688,6 @@ Future<void> _generateWithInternalAI(
 }
 
 Future<void> _generateWithExternalAI(BuildContext context, Contact contact) async {
-  // 显示加载指示器
   showDialog(
     context: context,
     barrierDismissible: false,
@@ -684,33 +695,74 @@ Future<void> _generateWithExternalAI(BuildContext context, Contact contact) asyn
   );
   
   try {
-    // 自动生成提示词
-    final prompt = '''请为联系人「${contact.name}」生成未来7天的社交任务建议。
+    final profileProvider = context.read<ProfileProvider>();
+    final socialProvider = context.read<ContactSocialProvider>();
+    final userProfile = profileProvider.profile;
+    final social = socialProvider.getSocial(contact.id);
+    final logs = socialProvider.getLogsForContact(contact.id);
 
-联系人信息：
-- 姓名：${contact.name}
-- 关系层级：${contact.levelName}
-${contact.goalRelation != null ? '- 目标关系：${contact.goalRelation}' : ''}
-${contact.tags.isNotEmpty ? '- 标签：${contact.tags.join('、')}' : ''}
+    final buffer = StringBuffer();
+    buffer.writeln('请为联系人「${contact.name}」生成未来7天的社交任务建议。');
+    buffer.writeln('');
 
-请根据以上信息，生成具体可执行的社交任务，包括：
-1. 任务类型（如：发消息、打电话、社交互动等）
-2. 任务标题
-3. 具体描述
-4. 建议执行时间
-5. 优先级（高/中/低）''';
+    if (userProfile != null) {
+      buffer.writeln('## 执行者画像');
+      buffer.writeln('- 性格: ${userProfile.personalityTraits.join('、')}');
+      buffer.writeln('- 沟通风格: ${userProfile.communicationStyle}');
+      buffer.writeln('- 社交能量: ${userProfile.socialEnergy}/100');
+      buffer.writeln('- 短信意愿: ${userProfile.opennessToTexting}/5');
+      buffer.writeln('- 见面意愿: ${userProfile.opennessToMeeting}/5');
+      buffer.writeln('');
+    }
+
+    buffer.writeln('## 联系人信息');
+    buffer.writeln('- 姓名：${contact.name}');
+    buffer.writeln('- 关系层级：${contact.levelName}');
+    if (contact.goalRelation != null) buffer.writeln('- 目标关系：${contact.goalRelation}');
+    if (contact.tags.isNotEmpty) buffer.writeln('- 标签：${contact.tags.join('、')}');
     
-    // 导出 PDF
+    buffer.writeln('');
+    buffer.writeln('## 社交大纲');
+    buffer.writeln('- 社交航向: ${social.directionName}');
+    buffer.writeln('- 关系阶段: ${social.currentStageName} → ${social.targetStageName}');
+    buffer.writeln('- 关系温度: ${social.warmthLevel}/10');
+    if (social.outlineTopics.isNotEmpty) {
+      buffer.writeln('- 推荐话题: ${social.outlineTopics.join('、')}');
+    }
+    if (social.avoidTopics.isNotEmpty) {
+      buffer.writeln('- 避免话题: ${social.avoidTopics.join('、')}');
+    }
+    if (social.customOutline != null && social.customOutline!.isNotEmpty) {
+      buffer.writeln('- 自定义大纲: ${social.customOutline}');
+    }
+
+    if (logs.isNotEmpty) {
+      buffer.writeln('');
+      buffer.writeln('## 近期互动');
+      for (final log in logs.take(3)) {
+        buffer.writeln('- ${log.title} (${log.emotionalToneEmoji}${log.emotionalTone ?? '中性'})');
+      }
+    }
+
+    buffer.writeln('');
+    buffer.writeln('请根据以上信息，生成具体可执行的社交任务，包括：');
+    buffer.writeln('1. 开场白建议（匹配执行者沟通风格）');
+    buffer.writeln('2. 任务类型（如：发消息、打电话、社交互动等）');
+    buffer.writeln('3. 任务标题和具体描述');
+    buffer.writeln('4. 建议执行时间和频率');
+    buffer.writeln('5. 优先级（高/中/低）');
+    buffer.writeln('6. 3-5个具体执行步骤指导');
+
+    final prompt = buffer.toString();
+    
     final file = await PdfExporter.exportExternalAIPdf(
       title: '为 ${contact.name} 生成社交任务',
       prompt: prompt,
       contactName: contact.name,
     );
     
-    // 关闭加载指示器
     if (context.mounted) Navigator.pop(context);
     
-    // 分享 PDF
     if (context.mounted) {
       await Share.shareXFiles(
         [XFile(file.path)],
@@ -719,7 +771,6 @@ ${contact.tags.isNotEmpty ? '- 标签：${contact.tags.join('、')}' : ''}
       );
     }
   } catch (e) {
-    // 关闭加载指示器
     if (context.mounted) Navigator.pop(context);
     
     if (context.mounted) {
@@ -835,13 +886,30 @@ class _RelationshipTab extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 15),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showLevelChangeDialog(context, contact, provider),
-                    icon: const Icon(Icons.trending_up),
-                    label: const Text('调整关系层级'),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showLevelChangeDialog(context, contact, provider),
+                        icon: const Icon(Icons.trending_up),
+                        label: const Text('调整关系层级'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pushNamed(
+                            context,
+                            '/contact-social',
+                            arguments: contact,
+                          );
+                        },
+                        icon: const Icon(Icons.flag),
+                        label: const Text('社交管理'),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 const Text(

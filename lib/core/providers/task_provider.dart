@@ -6,6 +6,8 @@ import '../../services/notification_service.dart';
 import '../../services/task_generator_service.dart';
 import '../../models/ai_config.dart';
 import '../../models/contact.dart';
+import '../../models/user_profile.dart';
+import '../../models/contact_social.dart';
 
 class TaskProvider extends ChangeNotifier {
   final _uuid = const Uuid();
@@ -134,6 +136,9 @@ class TaskProvider extends ChangeNotifier {
     required AIModel model,
     String? systemPrompt,
     int days = 7,
+    UserProfile? userProfile,
+    ContactSocial? contactSocial,
+    List<InteractionLog>? interactionLogs,
   }) async {
     try {
       final tasks = await TaskGeneratorService.generateTasks(
@@ -141,6 +146,9 @@ class TaskProvider extends ChangeNotifier {
         model: model,
         systemPrompt: systemPrompt,
         days: days,
+        userProfile: userProfile,
+        contactSocial: contactSocial,
+        interactionLogs: interactionLogs,
       );
 
       for (final task in tasks) {

@@ -47,6 +47,28 @@ class _SettingsPageState extends State<SettingsPage> {
         padding: const EdgeInsets.all(16),
         children: [
           _SettingsSection(
+            title: '画像与社交',
+            children: [
+              _SettingsTile(
+                icon: Icons.person_outline,
+                title: '我的社交画像',
+                subtitle: '查看和管理你的性格特征、沟通风格',
+                onTap: () => Navigator.pushNamed(context, '/user-profile'),
+              ),
+              _SettingsTile(
+                icon: Icons.flag,
+                title: '社交航向设置',
+                subtitle: '为每个联系人设置社交方向和大纲',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('请前往联系人详情页设置社交航向')),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _SettingsSection(
             title: 'AI设置',
             children: [
               _SettingsTile(

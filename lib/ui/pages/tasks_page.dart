@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../core/providers/task_provider.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/ai_provider.dart';
+import '../../core/providers/profile_provider.dart';
 import '../../models/task.dart';
 import '../../models/contact.dart';
 import 'package:intl/intl.dart';
@@ -503,6 +504,12 @@ class _TaskItem extends StatelessWidget {
                           color: Colors.green,
                           onPressed: () {
                             context.read<TaskProvider>().completeTask(task.id);
+                            context.read<ProfileProvider>().updateProfileFromTask(
+                              completed: true,
+                              taskType: task.type,
+                              reason: '任务完成: ${task.title}',
+                            );
+                            context.read<ProfileProvider>().incrementInteractions();
                           },
                         ),
                         IconButton(
