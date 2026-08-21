@@ -850,7 +850,7 @@ class PdfExporter {
     for (final img in imageDataList) {
       sections.add(
         PdfSection.image(
-          img.bytes,
+          Uint8List.fromList(img.bytes),
           caption: img.alt.isEmpty ? null : img.alt,
           widthFraction: 0.85,
           alignment: 'center',
