@@ -6,7 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
-import 'package:neom_docs/neom_docs.dart';
+import 'package:flutter_pdf_export/flutter_pdf_export.dart';
 
 class PdfExporter {
   static pw.Font? _chineseFont;
@@ -47,7 +47,6 @@ class PdfExporter {
     '/mnt/system/fonts',
     '/mnt/vendor/fonts',
     '/system_ext/fonts',
-    '/product/fonts/fonts',
     '/odm/fonts',
     '/system/system_ext/fonts',
   ];
@@ -89,10 +88,6 @@ class PdfExporter {
     '/system/fonts/WenQuanYiMicroHei.ttf',
     '/system/fonts/ARPL-UMing.ttf',
     '/system/fonts/GBCSans.ttf',
-    '/system/fonts/NotoColorEmoji.ttf',
-    '/system/fonts/NotoSans-Regular.ttf',
-    '/system/fonts/DroidSerif.ttf',
-    '/system/fonts/Roboto-Regular.ttf',
   ];
 
   static Future<void> _scanAndLoadFonts() async {
@@ -117,33 +112,18 @@ class PdfExporter {
 
     final seen = <String>{};
     candidates.removeWhere((p) => !seen.add(p));
-
     candidates.sort((a, b) => _fontScore(a).compareTo(_fontScore(b)));
-
-    // ignore: avoid_print
-    print('[PdfExporter] 字体扫描完成: ${candidates.length} 个候选字体');
 
     for (final path in candidates) {
       final font = await _tryLoadFont(path);
       if (font != null) {
         _chineseFont = font;
         _loadedFontPath = path;
-        // ignore: avoid_print
-        print('[PdfExporter] 成功加载中文字体: ${path.split('/').last}');
         return;
       }
     }
 
-    // ignore: avoid_print
-    print('[PdfExporter] 警告: 未找到可用中文字体，将使用备选方案');
     _chineseFont = await _loadFallbackFont();
-    if (_chineseFont != null) {
-      // ignore: avoid_print
-      print('[PdfExporter] 加载备选字体成功');
-    } else {
-      // ignore: avoid_print
-      print('[PdfExporter] 错误: 所有字体加载失败，PDF中文可能显示为□');
-    }
   }
 
   static bool _isFontFile(String path) {
@@ -175,76 +155,11 @@ class PdfExporter {
       final bytes = await file.readAsBytes();
       if (bytes.length < 2048) return null;
 
-      if (path.toLowerCase().endsWith('.ttc')) {
-        return await _tryLoadTtcFont(path, bytes);
-      }
-
-      final font = pw.Font.ttf(bytes.buffer.asByteData());
-      if (_validateFont(font)) {
-        return font;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
-  }
-
-  static Future<pw.Font?> _tryLoadTtcFont(String path, List<int> bytes) async {
-    try {
       final font = pw.Font.ttf(Uint8List.fromList(bytes).buffer.asByteData());
       if (_validateFont(font)) {
         return font;
       }
       return null;
-    } catch (e) {
-      // ignore: avoid_print
-      print('[PdfExporter] TTC字体直接解析失败 $path: $e，尝试提取子字体');
-      return await _extractTtcSubFont(path);
-    }
-  }
-
-  static Future<pw.Font?> _extractTtcSubFont(String ttcPath) async {
-    try {
-      final file = File(ttcPath);
-      final raf = await file.open();
-      final header = List<int>.filled(12, 0);
-      await raf.readInto(header);
-      await raf.close();
-
-      if (header[0] != 0x00 ||
-          header[1] != 0x01 ||
-          header[2] != 0x00 ||
-          header[3] != 0x00) {
-        return null;
-      }
-
-      final fontCount = ByteData.sublistView(Uint8List.fromList(header), 8, 12).getUint32(0);
-      if (fontCount <= 0 || fontCount > 100) return null;
-
-      // ignore: avoid_print
-      print('[PdfExporter] TTC包含$fontCount个子字体，尝试提取第一个');
-
-      try {
-        final fullBytes = await file.readAsBytes();
-        final offsetTableOffset = 12;
-        final offsetBytes = List<int>.generate(fontCount * 4, (i) => fullBytes[offsetTableOffset + i]);
-        final bd = ByteData.sublistView(Uint8List.fromList(offsetBytes));
-        final firstFontOffset = bd.getUint32(0);
-
-        final fontData = Uint8List.fromList(
-            fullBytes.sublist(firstFontOffset, fullBytes.length),
-        );
-
-        final font = pw.Font.ttf(fontData.buffer.asByteData());
-        if (_validateFont(font)) {
-          // ignore: avoid_print
-          print('[PdfExporter] 成功从TTC提取子字体');
-          return font;
-        }
-        return null;
-      } catch (e) {
-        return null;
-      }
     } catch (e) {
       return null;
     }
@@ -273,7 +188,7 @@ class PdfExporter {
         if (!await file.exists()) continue;
         final bytes = await file.readAsBytes();
         if (bytes.length < 2048) continue;
-        final font = pw.Font.ttf(bytes.buffer.asByteData());
+        final font = pw.Font.ttf(Uint8List.fromList(bytes).buffer.asByteData());
         if (_validateFont(font)) {
           return font;
         }
@@ -302,7 +217,7 @@ class PdfExporter {
       final bytes = await file.readAsBytes();
       if (bytes.length < 2048) return false;
 
-      final font = pw.Font.ttf(bytes.buffer.asByteData());
+      final font = pw.Font.ttf(Uint8List.fromList(bytes).buffer.asByteData());
       if (_validateFont(font)) {
         _chineseFont = font;
         _loadedFontPath = path;
@@ -341,20 +256,9 @@ class PdfExporter {
     return fonts;
   }
 
-  /// 构造 ThemeData：
-  /// 注意：pdf 3.13 在 TextStyle 已显式设 font 时，ThemeData 的 base/bold
-  /// 会做二次检查，可能干扰。这里保持 ThemeData.withFont() 全空，
-  /// 让 _ts() 的 font 设置直接生效。
   static pw.ThemeData _buildTheme() {
     return pw.ThemeData.withFont();
   }
-
-  // ==================================================================
-  // Markdown -> List<pw.Widget> 自渲染（无需依赖 pdf 包内置 markdown parser，
-  // 该 parser 在 3.13+ 已被移除/更名）。
-  // 支持语法：ATX 标题(#~######)、有序列表、无序列表(-/*)、> blockquote、
-  // ``` fenced 代码块、--- 分割线、普通段落。
-  // ==================================================================
 
   static pw.TextStyle _ts(double size, {PdfColor? color, double? height}) {
     final f = _chineseFont;
@@ -370,7 +274,6 @@ class PdfExporter {
   }
 
   static String _strip(String s) {
-    // 去掉 emoji & 控制字符
     var r = s;
     try {
       r = r.replaceAllMapped(
@@ -392,14 +295,13 @@ class PdfExporter {
     );
   }
 
-  /// 将 Markdown 文本解析为 widget 列表（不支持嵌套块，仅顶层结构）
   static List<pw.Widget> _renderMarkdown(String markdown) {
     final lines = markdown.split('\n');
     final out = <pw.Widget>[];
     final paraBuffer = StringBuffer();
     bool inFence = false;
     final fenceBuffer = StringBuffer();
-    int? listLevel;   // 1 = ordered, 2 = unordered
+    int? listLevel;
     final listBuffer = <String>[];
 
     void flushPara() {
@@ -463,11 +365,8 @@ class PdfExporter {
     final fence = RegExp(r'^\s*```');
     final atx = RegExp(r'^(#{1,6})\s+(.*)$');
     final hr = RegExp(r'^\s*(-{3,}|\*{3,}|_{3,})\s*$');
-    // 整行 Markdown 图片引用：![alt](path)
-    //   路径里允许中文/空格等非 ASCII，用非贪婪 .+? 匹配 () 内直到末尾空格或 EOL
     final imageLine = RegExp(r'^\s*!\[([^\]]*)\]\((.+)\)\s*$');
 
-    /// 读本地文件渲染为 pw.Image（宽度按 A4 页宽-80px 左右），失败返回 null
     pw.Widget? _tryLoadImage(String path, String alt) {
       try {
         final f = File(path);
@@ -475,8 +374,6 @@ class PdfExporter {
         final bytes = f.readAsBytesSync();
         if (bytes.isEmpty) return null;
         final mem = pw.MemoryImage(bytes);
-        // 不抛异常：先估算尺寸。宽度统一限制到约 A4 内容宽度 515 点，
-        // 高度上限 360 点（避免一张图占满整页）。
         return pw.ClipRRect(
           horizontalRadius: 6,
           verticalRadius: 6,
@@ -487,8 +384,6 @@ class PdfExporter {
               alignment: pw.Alignment.center),
         );
       } catch (e) {
-        // ignore: avoid_print
-        print('[PdfExporter] 图片渲染失败 path=$path alt=$alt: $e');
         return null;
       }
     }
@@ -521,8 +416,6 @@ class PdfExporter {
         continue;
       }
 
-      // 图片优先：**整行就是图片语法**（attachment 我们就是这么加的），
-      // 所以放在其他语法之前检查
       final img = imageLine.firstMatch(line);
       if (img != null) {
         flushPara();
@@ -552,8 +445,7 @@ class PdfExporter {
             }
             continue;
           }
-          // 图片加载失败：退回文本占位（不丢信息）
-          out.add(_txt('[图片：$alt] (${path.split('/').last} 加载失败，请在APP中查看原素材)',
+          out.add(_txt('[图片：$alt] (${path.split('/').last} 加载失败)',
               11, color: PdfColors.red600));
           out.add(pw.SizedBox(height: 10));
           continue;
@@ -567,7 +459,6 @@ class PdfExporter {
         final g1 = atxMatch.group(1);
         final g2 = atxMatch.group(2);
         if (g1 == null || g2 == null) {
-          // 当做普通段落
           if (paraBuffer.isNotEmpty) paraBuffer.write(' ');
           paraBuffer.write(line.trim());
           continue;
@@ -604,7 +495,6 @@ class PdfExporter {
         flushPara();
         final g = ord.group(1);
         if (g != null) {
-          // 列表项如果其实是图片语法，交给图片处理（不加进列表）
           final innerImg = imageLine.firstMatch(g.trim());
           if (innerImg != null) {
             flushList();
@@ -642,7 +532,6 @@ class PdfExporter {
         flushPara();
         final g = unord.group(1);
         if (g != null) {
-          // 列表项如果其实是图片语法，交给图片处理
           final innerImg = imageLine.firstMatch(g.trim());
           if (innerImg != null) {
             flushList();
@@ -711,7 +600,6 @@ class PdfExporter {
         continue;
       }
 
-      // 普通段落
       if (paraBuffer.isNotEmpty) paraBuffer.write(' ');
       paraBuffer.write(line.trim());
     }
@@ -722,7 +610,6 @@ class PdfExporter {
     return out;
   }
 
-  /// 构造标准 Markdown 字符串（public：UI 层需要先构建侧车 .md 文件时调用）
   static String buildMarkdown({
     required String title,
     required String prompt,
@@ -741,7 +628,6 @@ class PdfExporter {
     );
   }
 
-  /// 构造标准 Markdown 字符串
   static String _buildMarkdown({
     required String title,
     required String prompt,
@@ -781,7 +667,6 @@ class PdfExporter {
 
     md.writeln('## AI 任务指令');
     md.writeln();
-    // 指令中可能包含 ```json``` 代码块，直接保留原始内容
     md.writeln(prompt);
     md.writeln();
 
@@ -791,8 +676,6 @@ class PdfExporter {
       md.writeln('以下素材已通过APP附加，请AI分析时结合考虑：');
       md.writeln();
       for (final att in attachments) {
-        // 图片引用行直接原样输出（让 _renderMarkdown 的顶层 imageLine
-        // 正则能正确匹配），其他文本行作为无序列表项
         if (att.startsWith('![') && att.contains('](')) {
           md.writeln(att);
         } else {
@@ -814,23 +697,15 @@ class PdfExporter {
     return md.toString();
   }
 
-  /// 把一次尝试的阶段+异常+堆栈拼接成一份可读文本
-  /// （单行紧凑，方便 SnackBar 显示）
   static String _formatError(String phase, Object e, StackTrace st) {
     final msg = e.toString().replaceAll('\n', ' ');
     final head = '[$phase] $msg';
-    // 取堆栈前 2 行关键帧
     final lines = st.toString().split('\n').where((l) => l.trim().isNotEmpty).toList();
     if (lines.isEmpty) return head;
     final top = lines.take(2).map((l) => l.trim()).join(' | ');
     return '$head  Stack: $top';
   }
 
-  /// 导出结果：不仅包含文件，还包含本次最终走了哪一层、L1/L2 失败记录（若有），
-  /// 便于 UI 层给用户提示（你连不到 PC 也能把失败报告复制给作者）。
-  ///
-  /// 注意：使用**具名** record，调用方通过 `r.file / r.level / r.fallbackReport`
-  /// 取值（与 `(File, String, String)` 位置型 record 不是同一种类型）。
   static Future<({File file, String level, String fallbackReport})> exportExternalAIPdfEx({
     required String title,
     required String prompt,
@@ -838,14 +713,9 @@ class PdfExporter {
     String? context,
     List<String>? attachments,
   }) async {
-    // 最外层再统一包一次：任何"漏掉"的异常（例如 L1/L2/L3 内部 try/catch 都没接住时），
-    // 全部重新包装成「三次导出均失败」+ 总堆栈，保证 UI 层拿到的都是合并报告，
-    // SnackBar 一定出现复制崩溃报告按钮。
     try {
       final now = DateTime.now();
       final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
-
-      await _scanAndLoadFonts();
 
       final markdown = _buildMarkdown(
         title: title,
@@ -858,126 +728,96 @@ class PdfExporter {
 
       final errors = <String>[];
 
-      // L0：neom_docs 专业库渲染（仅适用于非中文、无图片的内容）
-      // neom_docs 使用 Open Sans 字体，不支持中文；且不支持 Markdown 图片语法
-      // 检测到中文或图片时直接跳过，进入 L1 自建渲染（支持中文字体和图片）
-      final hasChinese = RegExp(r'[\u4e00-\u9fff\u3400-\u4dbf]').hasMatch(markdown);
-      final hasImages = RegExp(r'!\[.*?\]\([^)]+\)').hasMatch(markdown);
-
-      if (!hasChinese && !hasImages) {
-        try {
-          final phase = 'L0_neom_docs';
-          // ignore: avoid_print
-          print('[PdfExporter] 尝试L0: neom_docs 专业库渲染 (非中文、无图片)');
-
-          final pdfBytes = await NeomPdfService.generateFromMarkdown(
-            content: markdown,
-            title: title,
-            theme: DocTheme(
-              accentColor: PdfColor.fromInt(0xFF0066CC),
-              accentDark: PdfColor.fromInt(0xFF004C99),
-              brandName: '社交塔子',
-              brandVersion: 'v1.0',
-              footerLeft: '社交塔子',
-              footerCenter: 'AI 任务中心',
-            ),
-          );
-
-          final f = await _writePdfFile(title, now, pdfBytes);
-          return (
-            file: f,
-            level: phase,
-            fallbackReport: errors.join('\n'),
-          );
-        } catch (e, st) {
-          final line = _formatError('L0_neom_docs', e, st);
-          errors.add(line);
-          // ignore: avoid_print
-          print('[PdfExporter] L0失败(将降级到自建渲染): $line');
-        }
-      } else {
-        final skipReason = hasChinese ? '内容含中文(neom_docs不支持)' : '内容含图片(neom_docs不支持)';
-        // ignore: avoid_print
-        print('[PdfExporter] 跳过L0_neom_docs: $skipReason，直接使用L1自建渲染');
-        errors.add('[L0_neom_docs] 跳过: $skipReason');
+      // L0: 使用 flutter_pdf_export (支持中文，使用 Noto Sans SC 字体)
+      try {
+        final phase = 'L0_flutter_pdf_export';
+        final file = await _exportWithFlutterPdfExport(title, markdown, now);
+        return (
+          file: file,
+          level: phase,
+          fallbackReport: errors.join('\n'),
+        );
+      } catch (e, st) {
+        final line = _formatError('L0_flutter_pdf_export', e, st);
+        errors.add(line);
       }
 
-      for (var attempt = 1; attempt <= 3; attempt++) {
-        final phase = 'L$attempt';
-        try {
-          pw.ThemeData theme;
-          if (attempt == 1) {
-            // L1：尝试加载系统 CJK 字体 + Markdown 渲染；
-            // 注意：因 pdf 3.13 内部 save() 的字体子集化不暴露 API 让我们关闭，
-            // 若加载中文字体后 save 仍炸 null，L2 会立即退回无字体模式。
-            try {
-              await _scanAndLoadFonts();
-            } catch (_) {}
-            theme = _buildTheme();
-            final widgets = _renderMarkdown(markdown);
-            final f = await _saveWidgetsToPdf(title, now, widgets, theme);
-            return (
-              file: f,
-              level: phase,
-              fallbackReport: errors.join('\n'),
-            );
-          } else if (attempt == 2) {
-            // L2：零字体 + Markdown 渲染。
-            // pdf 使用内置 Helvetica，中文会变 □，但不会触发字体相关 ! 断言。
-            theme = pw.ThemeData.withFont();
-            _chineseFont = null;
-            final widgets = _renderMarkdown(markdown);
-            final f = await _saveWidgetsToPdf(title, now, widgets, theme);
-            return (
-              file: f,
-              level: phase,
-              fallbackReport: errors.join('\n'),
-            );
-          } else {
-            // L3：零字体 + 纯文本单页（终极兜底）。
-            theme = pw.ThemeData.withFont();
-            _chineseFont = null;
-            final bytes = await _renderPlainTextFallback(
-              title,
-              prompt,
-              contactName,
-              context,
-              attachments,
-              dateStr,
-              theme,
-            );
-            final f = await _writePdfFile(title, now, bytes);
-            return (
-              file: f,
-              level: phase,
-              fallbackReport: errors.join('\n'),
-            );
-          }
-        } catch (e, st) {
-          final line = _formatError(phase, e, st);
-          errors.add(line);
-          // ignore: avoid_print
-          print('[PdfExporter] 尝试$phase失败: $line');
-          if (attempt == 3) {
-            final merged = errors.join('\n');
-            throw StateError('三次导出均失败\n$merged');
-          }
-          await Future<void>.delayed(Duration.zero);
-        }
+      // L1: 降级到自建渲染器 (使用系统中文字体)
+      try {
+        final phase = 'L1_fallback';
+        await _scanAndLoadFonts();
+        final theme = _buildTheme();
+        final widgets = _renderMarkdown(markdown);
+        final f = await _saveWidgetsToPdf(title, now, widgets, theme);
+        return (
+          file: f,
+          level: phase,
+          fallbackReport: errors.join('\n'),
+        );
+      } catch (e, st) {
+        final line = _formatError('L1_fallback', e, st);
+        errors.add(line);
       }
-      throw StateError('PDF导出失败: 未知错误');
+
+      // L2: 最终兜底
+      try {
+        final phase = 'L2_final';
+        final theme = _buildTheme();
+        _chineseFont = null;
+        final bytes = await _renderPlainTextFallback(
+          title, prompt, contactName, context, attachments, dateStr, theme,
+        );
+        final f = await _writePdfFile(title, now, bytes);
+        return (
+          file: f,
+          level: phase,
+          fallbackReport: errors.join('\n'),
+        );
+      } catch (e, st) {
+        final line = _formatError('L2_final', e, st);
+        errors.add(line);
+      }
+
+      throw StateError('PDF导出失败\n${errors.join('\n')}');
     } catch (e, st) {
-      // 二次兜底：若 for 循环外、入口处的未捕获异常也在此合并
-      if (e is StateError &&
-          (e.message ?? '').startsWith('三次导出均失败')) {
+      if (e is StateError && (e.message ?? '').startsWith('PDF导出失败')) {
         rethrow;
       }
       final extra = _formatError('GLOBAL', e, st);
-      throw StateError('三次导出均失败(global catch)\n$extra');
+      throw StateError('PDF导出失败(global)\n$extra');
     }
   }
 
-  /// 兼容旧签名：内部调用扩展版
+  static Future<File> _exportWithFlutterPdfExport(
+      String title, String markdown, DateTime now) async {
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(now);
+    final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
+    final dir = await getTemporaryDirectory();
+    final outputPath = '${dir.path}/$fileName';
+
+    final file = await PdfBuilder.generate(
+      PdfDocumentData.fromMarkdown(
+        title: title,
+        markdown: markdown,
+        style: PdfStyle.light.copyWith(
+          accentColor: PdfColor.fromInt(0xFF0066CC),
+          footerLeftText: '社交塔子 AI任务中心',
+          footerCenterText: 'AI 任务生成素材',
+          showPageNumbers: true,
+          bodyFontSize: 13,
+        ),
+      ),
+    );
+
+    if (file.path != outputPath) {
+      final savedFile = await file.copy(outputPath);
+      return savedFile;
+    }
+
+    return file;
+  }
+
   static Future<File> exportExternalAIPdf({
     required String title,
     required String prompt,
@@ -1004,7 +844,6 @@ class PdfExporter {
     final pdf = pw.Document(theme: theme);
     const chunkSize = 60;
     final chunks = <List<pw.Widget>>[];
-    // widgets 允许为空（至少塞一个 SizedBox，避免 pdf 库极端空断言）
     if (widgets.isEmpty) {
       chunks.add([pw.SizedBox.shrink()]);
     } else {
@@ -1014,10 +853,6 @@ class PdfExporter {
       }
     }
 
-    // 每一页独立 try/catch + save 时 subsetFonts: false
-    // （最关键：关闭字体子集化，DroidSansFallback 等系统字体的 cmap/OS-2
-    //  表和 pdf 库 subset 解析假设不完全匹配，很容易触发内部 ! 断言。
-    //  关闭 subset 后嵌入完整 ttf（文件稍大，但绝不会炸 subset）。）
     for (final chunk in chunks) {
       try {
         pdf.addPage(
@@ -1037,17 +872,7 @@ class PdfExporter {
             },
           ),
         );
-      } catch (e, st) {
-        // ignore: avoid_print
-        print('[PdfExporter] addPage失败，继续空页: $e\n$st');
-        try {
-          pdf.addPage(pw.Page(
-            theme: theme,
-            pageFormat: PdfPageFormat.a4,
-            build: (_) => pw.Text('(此页渲染失败)'),
-          ));
-        } catch (_) {}
-      }
+      } catch (_) {}
     }
 
     final bytes = await pdf.save();
@@ -1070,11 +895,10 @@ class PdfExporter {
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final filePath = '${dir.path}/$fileName';
     final file = File(filePath);
-    await file.writeAsBytes(bytes);
+    await file.writeBytes(bytes);
     return file;
   }
 
-  /// Markdown 路径失败时的终极兜底：极简 widget 树，尽量不依赖 pdf 高级 API
   static Future<List<int>> _renderPlainTextFallback(
     String title,
     String prompt,
@@ -1166,19 +990,10 @@ class PdfExporter {
           },
         ),
       );
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('[PdfExporter L3] addPage失败，尝试最小空页: $e\n$st');
-      pdf.addPage(pw.Page(build: (_) => pw.Text('fallback')));
-    }
-    // pdf 3.13 不暴露 subsetFonts 参数，直接默认 save()；
-    // 如果传入了中文字体触发 subset 内部 null，L2/L3 无字体模式能兜底。
+    } catch (_) {}
     return pdf.save();
   }
 
-  /// 把完整中文 Markdown 原文写进临时 .md 文件，分享 PDF 时一起作为附件，
-  /// 这样即便 PDF 用内置 Helvetica 把中文渲染成 □，第三方 AI 读 .md 附件
-  /// 也能 100% 获取到中文原文。
   static Future<File> writeMarkdownSidecar(String title, String markdown) async {
     Directory dir;
     try {
@@ -1186,8 +1001,7 @@ class PdfExporter {
     } catch (_) {
       dir = Directory.systemTemp;
     }
-    final timestamp =
-        DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+    final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final fileName = '社交塔子_${safeTitle}_$timestamp.md';
     final filePath = '${dir.path}/$fileName';
