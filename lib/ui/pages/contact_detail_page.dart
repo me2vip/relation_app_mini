@@ -427,8 +427,6 @@ class _InfoTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
       children: [
-        _buildContactMethods(context),
-        if (contact.methods.isNotEmpty) const SizedBox(height: 20),
         _sectionTitle('基本信息', Icons.person),
         _infoCard([
           _infoRow(Icons.transgender, '性别', contact.genderName),
@@ -815,93 +813,6 @@ class _InfoTab extends StatelessWidget {
     );
   }
 
-  Widget _buildContactMethods(BuildContext context) {
-    if (contact.methods.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionTitle('联系方式', Icons.phone_android),
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 80,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: contact.methods.length,
-            itemBuilder: (context, index) {
-              final method = contact.methods[index];
-              return Container(
-                width: 140,
-                margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      _getPlatformColor(method.platform),
-                      _getPlatformColor(method.platform).withOpacity(0.7),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: _getPlatformColor(method.platform)
-                          .withOpacity(0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(_getPlatformIcon(method.platform),
-                          color: Colors.white, size: 22),
-                      const SizedBox(height: 8),
-                      Text(
-                        method.platform,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        method.account,
-                        style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 12,
-                            overflow: TextOverflow.ellipsis),
-                        maxLines: 1,
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Color _getPlatformColor(String platform) {
-    switch (platform.toLowerCase()) {
-      case '微信':
-        return const Color(0xFF07C160);
-      case 'QQ':
-        return const Color(0xFF12B7F5);
-      case '手机':
-        return const Color(0xFF2196F3);
-      case '邮箱':
-        return const Color(0xFFFF9800);
-      default:
-        return const Color(0xFF9C27B0);
-    }
-  }
-
   Widget _sectionTitle(String title, IconData icon) => Padding(
         padding: const EdgeInsets.only(bottom: 10, left: 4),
         child: Row(
@@ -985,21 +896,6 @@ class _InfoTab extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  IconData _getPlatformIcon(String platform) {
-    switch (platform.toLowerCase()) {
-      case '微信':
-        return Icons.chat;
-      case 'QQ':
-        return Icons.chat_bubble;
-      case '手机':
-        return Icons.phone;
-      case '邮箱':
-        return Icons.email;
-      default:
-        return Icons.contact_page;
-    }
   }
 }
 

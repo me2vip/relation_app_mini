@@ -676,60 +676,6 @@ class _ContactEditPageState extends State<ContactEditPage> {
                             )),
                           ],
                         ),
-                        _buildSection(
-                          index: 8,
-                          title: '社交账号',
-                          subtitle: '账号管理与标签',
-                          icon: Icons.share_outlined,
-                          children: [
-                            if (_methods.isNotEmpty)
-                              ..._methods.map((m) => Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade200),
-                                ),
-                                child: ListTile(
-                                  dense: true,
-                                  leading: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.deepOrange.withOpacity( 0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(Icons.person_outline, color: Colors.deepOrange, size: 20),
-                                  ),
-                                  title: Text(m.platform, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  subtitle: Text(m.account, style: TextStyle(color: Colors.grey[600])),
-                                  trailing: IconButton(
-                                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                    onPressed: () => setState(() => _methods.remove(m)),
-                                  ),
-                                ),
-                              )),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.deepOrange,
-                                  side: const BorderSide(color: Colors.deepOrange, width: 1.5),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                ),
-                                icon: const Icon(Icons.add, size: 20),
-                                label: const Text('添加社交账号', style: TextStyle(fontWeight: FontWeight.w600)),
-                                onPressed: _addMethod,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            _field(TextFormField(
-                              controller: _tagsController,
-                              maxLines: 2,
-                              decoration: _modernInputDecoration('自定义标签', '多个标签用顿号或逗号分隔'),
-                            )),
-                          ],
-                        ),
                         Consumer<ChannelConfigProvider>(
                           builder: (ctx, channelProvider, _) {
                             final existingConfigs = _isEditing
@@ -738,7 +684,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
                             final allConfigs = [...existingConfigs, ..._pendingChannelConfigs];
 
                             return _buildSection(
-                              index: 9,
+                              index: 8,
                               title: '社交途径',
                               subtitle: '管理各平台渠道配置',
                               icon: Icons.link_outlined,
@@ -833,6 +779,19 @@ class _ContactEditPageState extends State<ContactEditPage> {
                               ],
                             );
                           },
+                        ),
+                        _buildSection(
+                          index: 9,
+                          title: '标签',
+                          subtitle: '自定义标签描述',
+                          icon: Icons.label_outline,
+                          children: [
+                            _field(TextFormField(
+                              controller: _tagsController,
+                              maxLines: 2,
+                              decoration: _modernInputDecoration('自定义标签', '多个标签用顿号或逗号分隔'),
+                            )),
+                          ],
                         ),
                         const SizedBox(height: 40),
                       ],
