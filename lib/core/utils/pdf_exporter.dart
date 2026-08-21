@@ -688,9 +688,9 @@ class PdfExporter {
 
     md.writeln('---');
     md.writeln();
-    md.writeln('## AI 调用提示词（发送给 AI 的第一句话）');
+    md.writeln('## 方案一：调用 PDF 的提示词（PDF+首句对话）');
     md.writeln();
-    md.writeln('> 💡 复制以下内容作为与AI对话的第一条消息：');
+    md.writeln('> 💡 如果你要把此PDF文件发送给AI，请在聊天中先复制发送以下这句话：');
     md.writeln();
     md.writeln('```');
     md.writeln('请按照我发送的PDF文档要求执行任务。');
@@ -705,6 +705,48 @@ class PdfExporter {
     md.writeln('7. 每个任务必须包含steps字段，提供3-5个具体可执行的步骤指导');
     md.writeln('');
     md.writeln('请确保输出是完整的JSON格式，方便后续解析。');
+    md.writeln('```');
+    md.writeln();
+    md.writeln('---');
+    md.writeln();
+    md.writeln('## 方案二：独立提示词（无需发PDF，直接复制发给AI）');
+    md.writeln();
+    md.writeln('> 💡 如果你不能发文件给AI（某些App不支持），直接复制下方完整提示词即可：');
+    md.writeln();
+    md.writeln('```');
+    // 独立提示词 = 使用说明 + 素材 + prompt + 附件描述（全量打包，无需依赖PDF）
+    md.writeln('【社交任务生成指令】');
+    md.writeln('');
+    md.writeln('请根据以下素材和要求，为指定联系人生成社交任务计划。');
+    md.writeln('');
+    if (contactName != null && contactName.isNotEmpty) {
+      md.writeln('本次包含的联系人：$contactName');
+      md.writeln('');
+    }
+    if (context != null && context.isNotEmpty) {
+      md.writeln('【背景信息 / 素材】');
+      md.writeln(context);
+      md.writeln('');
+    }
+    if (attachments != null && attachments.isNotEmpty) {
+      md.writeln('【已附加的素材（请用户查看）】');
+      for (final att in attachments) {
+        if (att.startsWith('![') && att.contains('](')) {
+          final match = RegExp(r'!\[([^\]]*)\]\((.+)\)').firstMatch(att);
+          final alt = match?.group(1) ?? '';
+          final path = (match?.group(2) ?? '');
+          md.writeln('- 图片素材: ${alt.isNotEmpty ? alt : path.split('/').last}');
+        } else {
+          md.writeln('- $att');
+        }
+      }
+      md.writeln('');
+    }
+    md.writeln('【详细任务要求 + 输出格式】');
+    md.writeln(prompt);
+    md.writeln('');
+    md.writeln('【返回要求】');
+    md.writeln('请直接输出完整JSON格式，不要额外解释，方便复制回APP解析。');
     md.writeln('```');
     md.writeln();
 
