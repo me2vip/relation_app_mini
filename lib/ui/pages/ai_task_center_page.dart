@@ -1351,17 +1351,21 @@ class _ExportTabState extends State<_ExportTab> {
       phase = '分享PDF';
       setState(() => _pdfPath = result.file.path);
 
+      // 同时复制AI调用提示词到剪贴板（发送给AI的第一句话）
+      final executionPrompt = _getAiExecutionPrompt();
+      await Clipboard.setData(ClipboardData(text: executionPrompt));
+
       await Share.shareXFiles(
         [XFile(result.file.path)],
         subject: '社交任务AI素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
-        text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议。AI返回完整回复后，将回复全文复制回APP即可自动保存任务。',
+        text: 'PDF已导出，AI调用提示词已复制到剪贴板。请将PDF发送给外部AI，并粘贴剪贴板中的内容作为首条消息。AI返回完整回复后，将回复全文复制回APP即可自动保存任务。',
       );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('PDF已生成(${result.level})并分享'),
-            duration: const Duration(seconds: 4),
+            content: Text('PDF已分享(${result.level})，AI提示词已复制到剪贴板'),
+            duration: const Duration(seconds: 5),
           ),
         );
       }

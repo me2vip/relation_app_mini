@@ -688,6 +688,28 @@ class PdfExporter {
 
     md.writeln('---');
     md.writeln();
+    md.writeln('## AI 调用提示词（发送给 AI 的第一句话）');
+    md.writeln();
+    md.writeln('> 💡 复制以下内容作为与AI对话的第一条消息：');
+    md.writeln();
+    md.writeln('```');
+    md.writeln('请按照我发送的PDF文档要求执行任务。');
+    md.writeln('');
+    md.writeln('具体要求：');
+    md.writeln('1. 阅读PDF文档中的所有素材和指令');
+    md.writeln('2. 结合用户画像和联系人社交大纲进行分析');
+    md.writeln('3. 为每位联系人生成对应时间段内的社交任务建议');
+    md.writeln('4. 任务应匹配用户性格（社恐→文字交流，能量低→轻松社交）');
+    md.writeln('5. 遵循联系人的推荐话题，避开避免话题');
+    md.writeln('6. 严格按照PDF中的JSON格式返回结果');
+    md.writeln('7. 每个任务必须包含steps字段，提供3-5个具体可执行的步骤指导');
+    md.writeln('');
+    md.writeln('请确保输出是完整的JSON格式，方便后续解析。');
+    md.writeln('```');
+    md.writeln();
+
+    md.writeln('---');
+    md.writeln();
     md.writeln('### 重要提示');
     md.writeln();
     md.writeln(
