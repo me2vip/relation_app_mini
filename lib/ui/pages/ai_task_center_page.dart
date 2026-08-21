@@ -1097,6 +1097,8 @@ class _ExportTabState extends State<_ExportTab> {
   Future<void> _exportAndShare() async {
     setState(() => _isExporting = true);
     String phase = '初始化';
+    String? usedFallbackLevel;   // 'L2' 或 'L3' 代表用了兜底层级
+    String? fallbackErrorsText;  // L1或L1+L2 的错误（拼接）
     try {
       phase = '读取Provider与联系人';
       final data = context.read<_TaskCenterData>();
@@ -1112,13 +1114,34 @@ class _ExportTabState extends State<_ExportTab> {
       final attachments = data.getAttachmentDescriptions();
 
       phase = '调用PdfExporter.exportExternalAIPdf生成PDF';
-      final file = await PdfExporter.exportExternalAIPdf(
-        title: '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
-        prompt: prompt,
-        contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
-        context: data.sourceText,
-        attachments: attachments.isNotEmpty ? attachments : null,
-      );
+      File file;
+      String pdfLevel = 'L1';
+      String pdfFallbackReport = '';
+      try {
+        final result = await PdfExporter.exportExternalAIPdfEx(
+          title: '社交任务生成素材 - ${DateFormat('MM月dd日').format(DateTime.now())}',
+          prompt: prompt,
+          contactName: contacts.isEmpty ? null : '${contacts.length}位联系人',
+          context: data.sourceText,
+          attachments: attachments.isNotEmpty ? attachments : null,
+        );
+        file = result.file;
+        pdfLevel = result.level;
+        pdfFallbackReport = result.fallbackReport;
+        usedFallbackLevel = pdfLevel == 'L1' ? null : pdfLevel;
+        if (pdfFallbackReport.isNotEmpty) {
+          fallbackErrorsText = 'PDF最终走层级$pdfLevel；L1/L2失败记录:\n$pdfFallbackReport';
+        }
+      } on StateError catch (pdfErr, pdfSt) {
+        // PdfExporter 已经尝试 L1/L2/L3，统一抛出 "三次导出均失败"
+        // ignore: avoid_print
+        print('[Pdf导出全部层级失败] ${pdfErr.message}\n$pdfSt');
+        rethrow;
+      } catch (e, st) {
+        // ignore: avoid_print
+        print('[PdfExporter异常非StateError] $e\n$st');
+        rethrow;
+      }
       phase = '保存PDF路径到状态';
       final savedPath = file.path;
       setState(() => _pdfPath = savedPath);
@@ -1132,30 +1155,96 @@ class _ExportTabState extends State<_ExportTab> {
             text: '请将此PDF发送给外部AI，让AI按文档要求生成任务建议',
           );
         } catch (shareErr, shareSt) {
-          // 分享失败不影响PDF已生成的状态
+          final shareReport = '阶段=分享 PDF\n'
+              '异常: $shareErr\n'
+              '堆栈: $shareSt';
           // ignore: avoid_print
-          print('[PDF分享失败] $shareErr\n$shareSt');
+          print('[PDF分享失败] $shareReport');
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text('PDF已保存(${savedPath.split('/').last})，但分享失败: $shareErr'),
-                duration: const Duration(seconds: 3),
+                duration: const Duration(seconds: 6),
                 behavior: SnackBarBehavior.floating,
+                action: SnackBarAction(
+                  label: '复制详情',
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: shareReport));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('分享错误详情已复制到剪贴板'),
+                        duration: Duration(seconds: 2),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
               ),
             );
           }
         }
       }
+      // 若用了兜底层级（正常路径暂时没法在返回值暴露，这里给个说明）
+      if (usedFallbackLevel != null && fallbackErrorsText != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF已通过兼容层级($usedFallbackLevel)生成，若内容乱码请反馈'),
+            duration: const Duration(seconds: 5),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: '复制报告',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: fallbackErrorsText!));
+              },
+            ),
+          ),
+        );
+      }
     } catch (e, stackTrace) {
       if (mounted) {
         final msg = e.toString();
+        // 把报告做得非常详细，复制出来我就能看
+        final buf = StringBuffer();
+        buf.writeln('=== 社交塔子 PDF导出崩溃报告 v${DateTime.now().millisecondsSinceEpoch} ===');
+        buf.writeln('阶段: $phase');
+        buf.writeln('异常类型: ${e.runtimeType}');
+        buf.writeln('异常信息: $msg');
+        buf.writeln('堆栈:');
+        buf.write(stackTrace.toString());
+        final report = buf.toString();
         // ignore: avoid_print
-        print('[PDF导出异常阶段=$phase] $msg\n$stackTrace');
+        print(report);
+
+        // SnackBar 内容精简到 500 字内，保证可读性
+        final showMsg = msg.length > 420 ? '${msg.substring(0, 420)}…' : msg;
+        final short = '阶段[$phase]: $showMsg';
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('导出失败[$phase]: $msg'),
-            duration: const Duration(seconds: 6),
+            content: SizedBox(
+              height: 120,
+              child: SingleChildScrollView(
+                child: Text(
+                  '导出失败: $short\n\n点「复制崩溃报告」粘贴给作者即可定位修复',
+                  style: const TextStyle(fontSize: 12, height: 1.4),
+                ),
+              ),
+            ),
+            duration: const Duration(seconds: 15),
             behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: '复制崩溃报告',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: report));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('完整崩溃报告已复制到剪贴板，直接粘贴反馈即可'),
+                    duration: Duration(seconds: 3),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+            ),
           ),
         );
       }

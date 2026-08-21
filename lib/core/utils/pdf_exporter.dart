@@ -425,23 +425,30 @@ class PdfExporter {
     return md.toString();
   }
 
-  static Future<File> exportExternalAIPdf({
+  /// 把一次尝试的阶段+异常+堆栈拼接成一份可读文本
+  /// （单行紧凑，方便 SnackBar 显示）
+  static String _formatError(String phase, Object e, StackTrace st) {
+    final msg = e.toString().replaceAll('\n', ' ');
+    final head = '[$phase] $msg';
+    // 取堆栈前 2 行关键帧
+    final lines = st.toString().split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (lines.isEmpty) return head;
+    final top = lines.take(2).map((l) => l.trim()).join(' | ');
+    return '$head  Stack: $top';
+  }
+
+  /// 导出结果：不仅包含文件，还包含本次最终走了哪一层、L1/L2 失败记录（若有），
+  /// 便于 UI 层给用户提示（你连不到 PC 也能把失败报告复制给作者）。
+  static Future<(File file, String level, String fallbackReport)> exportExternalAIPdfEx({
     required String title,
     required String prompt,
     String? contactName,
     String? context,
     List<String>? attachments,
   }) async {
-    // 1. 字体准备（失败不阻塞）
-    try {
-      await _scanAndLoadFonts();
-    } catch (_) {}
-
-    final theme = _buildTheme();
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
 
-    // 2. Markdown 字符串 -> Widget 列表
     final markdown = _buildMarkdown(
       title: title,
       prompt: prompt,
@@ -451,53 +458,122 @@ class PdfExporter {
       dateStr: dateStr,
     );
 
-    // 3. 保存 PDF：优先自建 Markdown 渲染器 + 多个 pw.Page 分页；
-    //    完全不使用 pw.MultiPage（其内部 pageContext.pagesCount 在 pdf 3.13
-    //    使用了 ! 断言）和 MarkdownParser/MarkdownStyleSheet（3.13 已移除）。
-    List<int> bytes;
-    try {
-      final widgets = _renderMarkdown(markdown);
-      final pdf = pw.Document(theme: theme);
+    final errors = <String>[];
 
-      // 粗略分页：每 60 个 widget 一页（仅避免单页过高，不需要精确）
-      const chunkSize = 60;
-      final chunks = <List<pw.Widget>>[];
-      for (var i = 0; i < widgets.length; i += chunkSize) {
-        chunks.add(widgets.sublist(
-            i, i + chunkSize > widgets.length ? widgets.length : i + chunkSize));
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      final phase = 'L$attempt';
+      try {
+        pw.ThemeData theme;
+        if (attempt == 1) {
+          try {
+            await _scanAndLoadFonts();
+          } catch (_) {}
+          theme = _buildTheme();
+          final widgets = _renderMarkdown(markdown);
+          final f = await _saveWidgetsToPdf(title, now, widgets, theme);
+          return (
+            file: f,
+            level: phase,
+            fallbackReport: errors.join('\n'),
+          );
+        } else if (attempt == 2) {
+          theme = pw.ThemeData.withFont();
+          _chineseFont = null;
+          final widgets = _renderMarkdown(markdown);
+          final f = await _saveWidgetsToPdf(title, now, widgets, theme);
+          return (
+            file: f,
+            level: phase,
+            fallbackReport: errors.join('\n'),
+          );
+        } else {
+          theme = pw.ThemeData.withFont();
+          _chineseFont = null;
+          final bytes = await _renderPlainTextFallback(
+            title,
+            prompt,
+            contactName,
+            context,
+            attachments,
+            dateStr,
+            theme,
+          );
+          final f = await _writePdfFile(title, now, bytes);
+          return (
+            file: f,
+            level: phase,
+            fallbackReport: errors.join('\n'),
+          );
+        }
+      } catch (e, st) {
+        final line = _formatError(phase, e, st);
+        errors.add(line);
+        // ignore: avoid_print
+        print('[PdfExporter] 尝试$phase失败: $line');
+        if (attempt == 3) {
+          final merged = errors.join('\n');
+          throw StateError('三次导出均失败\n$merged');
+        }
+        await Future<void>.delayed(Duration.zero);
       }
-      // 至少一页
-      if (chunks.isEmpty) chunks.add([pw.SizedBox.shrink()]);
+    }
+    throw StateError('PDF导出失败: 未知错误');
+  }
 
-      for (final chunk in chunks) {
-        pdf.addPage(
-          pw.Page(
-            theme: theme,
-            pageFormat: PdfPageFormat.a4,
-            margin: const pw.EdgeInsets.all(40),
-            build: (_) => pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: chunk,
-            ),
+  /// 兼容旧签名：内部调用扩展版
+  static Future<File> exportExternalAIPdf({
+    required String title,
+    required String prompt,
+    String? contactName,
+    String? context,
+    List<String>? attachments,
+  }) async {
+    final r = await exportExternalAIPdfEx(
+      title: title,
+      prompt: prompt,
+      contactName: contactName,
+      context: context,
+      attachments: attachments,
+    );
+    return r.file;
+  }
+
+  static Future<File> _saveWidgetsToPdf(
+    String title,
+    DateTime now,
+    List<pw.Widget> widgets,
+    pw.ThemeData theme,
+  ) async {
+    final pdf = pw.Document(theme: theme);
+    const chunkSize = 60;
+    final chunks = <List<pw.Widget>>[];
+    for (var i = 0; i < widgets.length; i += chunkSize) {
+      chunks.add(widgets.sublist(
+          i, i + chunkSize > widgets.length ? widgets.length : i + chunkSize));
+    }
+    if (chunks.isEmpty) chunks.add([pw.SizedBox.shrink()]);
+    for (final chunk in chunks) {
+      pdf.addPage(
+        pw.Page(
+          theme: theme,
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          build: (_) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: chunk,
           ),
-        );
-      }
-      bytes = await pdf.save();
-    } catch (e, st) {
-      // ignore: avoid_print
-      print('[PdfExporter] Markdown渲染失败，退回纯文本PDF: $e\n$st');
-      bytes = await _renderPlainTextFallback(
-        title,
-        prompt,
-        contactName,
-        context,
-        attachments,
-        dateStr,
-        theme,
+        ),
       );
     }
+    final bytes = await pdf.save();
+    return _writePdfFile(title, now, bytes);
+  }
 
-    // 4. 写文件
+  static Future<File> _writePdfFile(
+    String title,
+    DateTime now,
+    List<int> bytes,
+  ) async {
     Directory dir;
     try {
       dir = await getTemporaryDirectory();
@@ -508,7 +584,6 @@ class PdfExporter {
     final safeTitle = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
     final fileName = '社交塔子_${safeTitle}_$timestamp.pdf';
     final filePath = '${dir.path}/$fileName';
-
     final file = File(filePath);
     await file.writeAsBytes(bytes);
     return file;
