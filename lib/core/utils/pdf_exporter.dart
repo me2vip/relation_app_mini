@@ -6,123 +6,339 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
+import 'package:neom_docs/neom_docs.dart';
 
 class PdfExporter {
-  /// 扫描到的首个 CJK 字体实例；找不到就是 null，退回 pdf 默认字体
   static pw.Font? _chineseFont;
   static bool _scanned = false;
+  static String? _loadedFontPath;
 
-  /// 关键词优先级顺序：越靠前越先尝试
-  static const List<String> _fontKeywords = [
-    'NotoSansCJK',
-    'NotoSerifCJK',
-    'NotoSansSC',
-    'NotoSerifSC',
-    'SourceHanSans',
-    'SourceHanSerif',
-    'DroidSansFallback',
-    'RobotoFallback',
-    'Miui-Bold',
-    'Miui-Regular',
-    'HanSans',
-    'PingFang',
-    'HarmonyOS',
-    'Sans',
+  static const List<String> _chineseFontKeywords = [
+    'notosanscjktc', 'notosanssc', 'notosanssc-regular',
+    'notoserifsc', 'notoserifcjk', 'sourcehansans', 'sourcehanserif',
+    'droidsansfallback', 'droidsansfallbackfull', 'droidsans',
+    'robotofallback', 'robotofallback-regular',
+    'miui', 'miui-regular', 'miui-bold', 'miuiui',
+    'hansans', 'hansanscn', 'hansanshans',
+    'pingfang', 'pingfangsc',
+    'harmonyos', 'harmonyossans', 'harmonyos-sans',
+    'gbcsans', 'gbc',
+    'heiti', 'songti', 'kaiti',
+    'fangzheng', 'wenquanyi', 'wenquanyimicro',
+    'google', 'googlesans', 'googlesanssc',
+    'arphic', 'arphicgothic', 'arphicming',
+    'notosans-regular', 'notoserif-regular',
+    'sans', 'serif',
+  ];
+
+  static const List<String> _systemFontDirs = [
+    '/system/fonts',
+    '/system/font',
+    '/system/fonts/hwfonts',
+    '/system/fonts/oppo',
+    '/system/fonts/vivo',
+    '/system/fonts/miui',
+    '/product/fonts',
+    '/product/fonts/fonts',
+    '/vendor/fonts',
+    '/vendor/fonts/fonts',
+    '/data/fonts',
+    '/data/local/fonts',
+    '/mnt/system/fonts',
+    '/mnt/vendor/fonts',
+    '/system_ext/fonts',
+    '/product/fonts/fonts',
+    '/odm/fonts',
+    '/system/system_ext/fonts',
+  ];
+
+  static const List<String> _hardCodedFontPaths = [
+    '/system/fonts/DroidSansFallback.ttf',
+    '/system/fonts/DroidSans.ttf',
+    '/system/fonts/DroidSansFallbackFull.ttf',
+    '/system/fonts/RobotoFallback-Regular.ttf',
+    '/system/fonts/RobotoFallback.ttf',
+    '/system/fonts/RobotoFallback-Bold.ttf',
+    '/system/fonts/NotoSans-Regular.ttf',
+    '/system/fonts/NotoSerif-Regular.ttf',
+    '/system/fonts/NotoSansCJK-Regular.ttc',
+    '/system/fonts/NotoSansCJK-Regular.ttf',
+    '/system/fonts/NotoSansSC-Regular.ttf',
+    '/system/fonts/NotoSerifCJK-Regular.ttc',
+    '/system/fonts/SourceHanSans-Regular.otf',
+    '/system/fonts/SourceHanSC-Regular.otf',
+    '/system/fonts/DejaVuSans.ttf',
+    '/system/fonts/DejaVuSans.ttc',
+    '/system/fonts/GoogleSans-Regular.ttf',
+    '/system/fonts/GoogleSansSC-Regular.ttf',
+    '/system/fonts/HanSans-Regular.ttf',
+    '/system/fonts/HanSansCN-Regular.ttf',
+    '/system/fonts/Miui-Regular.ttf',
+    '/system/fonts/Miui-Bold.ttf',
+    '/system/fonts/PingFangSC-Regular.ttf',
+    '/system/fonts/HarmonyOS-Sans-Regular.ttf',
+    '/system/fonts/HarmonyOSSans-Regular.ttf',
+    '/system/fonts/DroidSansFallbackHuaWei.ttf',
+    '/system/fonts/DroidSansFallbackMT.ttf',
+    '/system/fonts/HwHuaWeiSans.ttf',
+    '/system/fonts/HwSansCN.ttf',
+    '/system/fonts/HeitiSC.ttf',
+    '/system/fonts/Songti.ttc',
+    '/system/fonts/Kaiti.ttf',
+    '/system/fonts/FangZhengSan.ttf',
+    '/system/fonts/WenQuanYiMicroHei.ttf',
+    '/system/fonts/ARPL-UMing.ttf',
+    '/system/fonts/GBCSans.ttf',
+    '/system/fonts/NotoColorEmoji.ttf',
+    '/system/fonts/NotoSans-Regular.ttf',
+    '/system/fonts/DroidSerif.ttf',
+    '/system/fonts/Roboto-Regular.ttf',
   ];
 
   static Future<void> _scanAndLoadFonts() async {
     if (_scanned) return;
     _scanned = true;
 
-    // 优先级：硬编码最稳定的 DroidSans 路径（TTF 格式，Android 全版本可用）
-    // 然后再扫系统目录。**只试 .ttf/.otf，跳过 .ttc**（pdf 3.13 不支持 TTC 集合字体）
-    const hardCoded = [
-      '/system/fonts/DroidSansFallback.ttf',
-      '/system/fonts/DroidSans.ttf',
-      '/system/fonts/DroidSansFallbackFull.ttf',
-      '/system/fonts/RobotoFallback-Regular.ttf',
-      '/system/fonts/RobotoFallback.ttf',
-      '/system/fonts/NotoSans-Regular.ttf',
-      '/system/fonts/NotoSerif-Regular.ttf',
-    ];
+    final candidates = <String>[..._hardCodedFontPaths];
 
-    final candidates = <String>[...hardCoded];
-
-    try {
-      const fontDirs = [
-        '/system/fonts',
-        '/system/font',
-        '/data/fonts',
-        '/product/fonts',
-        '/vendor/fonts',
-      ];
-      for (final dir in fontDirs) {
-        try {
-          final d = Directory(dir);
-          if (!await d.exists()) continue;
-          await for (final f in d.list(recursive: false, followLinks: false)) {
-            if (f is! File) continue;
-            final lower = f.path.toLowerCase();
-            // ★ 只收集 TTF/OTF，TTC 集合格式 pdf 库不支持
-            if (lower.endsWith('.ttf') || lower.endsWith('.otf')) {
-              candidates.add(f.path);
-            }
+    for (final dir in _systemFontDirs) {
+      try {
+        final d = Directory(dir);
+        if (!await d.exists()) continue;
+        await for (final f in d.list(recursive: true, followLinks: false)) {
+          if (f is! File) continue;
+          final lower = f.path.toLowerCase();
+          if (_isFontFile(lower)) {
+            candidates.add(f.path);
           }
-        } catch (_) {}
-      }
-    } catch (_) {}
+        }
+      } catch (_) {}
+    }
 
-    // 去重
     final seen = <String>{};
     candidates.removeWhere((p) => !seen.add(p));
 
-    // 排序：硬编码路径最前，其余按关键词优先级
-    String score(String path) {
-      for (var i = 0; i < hardCoded.length; i++) {
-        if (path == hardCoded[i]) return '00_$i';
-      }
-      final lower = path.toLowerCase();
-      for (var i = 0; i < _fontKeywords.length; i++) {
-        if (lower.contains(_fontKeywords[i].toLowerCase())) {
-          return '${(i + 1).toString().padLeft(2, '0')}_${lower.split('/').last}';
-        }
-      }
-      return '99_${lower.split('/').last}';
-    }
-    candidates.sort((a, b) => score(a).compareTo(score(b)));
+    candidates.sort((a, b) => _fontScore(a).compareTo(_fontScore(b)));
 
     // ignore: avoid_print
-    print('[PdfExporter] 待扫描字体 ${candidates.length} 个: ${candidates.take(5).join(', ')}...');
+    print('[PdfExporter] 字体扫描完成: ${candidates.length} 个候选字体');
 
     for (final path in candidates) {
-      try {
-        final file = File(path);
-        final bytes = await file.readAsBytes();
-        if (bytes.length < 1024) {
-          // ignore: avoid_print
-          print('[PdfExporter] 跳过 $path: 文件过小 (${bytes.length} bytes)');
-          continue;
-        }
-        try {
-          final font = pw.Font.ttf(bytes.buffer.asByteData());
-          // 验证：用这个字体渲染 "测试" 两字的 TextStyle 构造是否正常
-          final probe = pw.TextStyle(font: font, fontSize: 12);
-          // ignore: avoid_print
-          print('[PdfExporter] 成功加载字体: ${path.split('/').last} (${bytes.length} bytes) probe=${probe.fontSize}');
-          _chineseFont = font;
-          return;
-        } catch (e) {
-          // ignore: avoid_print
-          print('[PdfExporter] 解析失败 $path: $e');
-        }
-      } catch (e) {
+      final font = await _tryLoadFont(path);
+      if (font != null) {
+        _chineseFont = font;
+        _loadedFontPath = path;
         // ignore: avoid_print
-        print('[PdfExporter] 读取失败 $path: $e');
+        print('[PdfExporter] 成功加载中文字体: ${path.split('/').last}');
+        return;
       }
     }
 
     // ignore: avoid_print
-    print('[PdfExporter] 全部 ${candidates.length} 个字体均未成功加载，将使用内置 Helvetica（中文显示为□）');
+    print('[PdfExporter] 警告: 未找到可用中文字体，将使用备选方案');
+    _chineseFont = await _loadFallbackFont();
+    if (_chineseFont != null) {
+      // ignore: avoid_print
+      print('[PdfExporter] 加载备选字体成功');
+    } else {
+      // ignore: avoid_print
+      print('[PdfExporter] 错误: 所有字体加载失败，PDF中文可能显示为□');
+    }
+  }
+
+  static bool _isFontFile(String path) {
+    return path.endsWith('.ttf') ||
+        path.endsWith('.otf') ||
+        path.endsWith('.ttc') ||
+        path.endsWith('.dfont');
+  }
+
+  static String _fontScore(String path) {
+    final lower = path.toLowerCase();
+    for (var i = 0; i < _hardCodedFontPaths.length; i++) {
+      if (path == _hardCodedFontPaths[i]) return '00_$i';
+    }
+    for (var i = 0; i < _chineseFontKeywords.length; i++) {
+      if (lower.contains(_chineseFontKeywords[i])) {
+        return '${(i + 1).toString().padLeft(3, '0')}_${lower.split('/').last}';
+      }
+    }
+    if (lower.endsWith('.ttf')) return '050_${lower.split('/').last}';
+    if (lower.endsWith('.otf')) return '060_${lower.split('/').last}';
+    if (lower.endsWith('.ttc')) return '070_${lower.split('/').last}';
+    return '099_${lower.split('/').last}';
+  }
+
+  static Future<pw.Font?> _tryLoadFont(String path) async {
+    try {
+      final file = File(path);
+      final bytes = await file.readAsBytes();
+      if (bytes.length < 2048) return null;
+
+      if (path.toLowerCase().endsWith('.ttc')) {
+        return await _tryLoadTtcFont(path, bytes);
+      }
+
+      final font = pw.Font.ttf(bytes.buffer.asByteData());
+      if (_validateFont(font)) {
+        return font;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static Future<pw.Font?> _tryLoadTtcFont(String path, List<int> bytes) async {
+    try {
+      final font = pw.Font.ttf(bytes.buffer.asByteData());
+      if (_validateFont(font)) {
+        return font;
+      }
+      return null;
+    } catch (e) {
+      // ignore: avoid_print
+      print('[PdfExporter] TTC字体直接解析失败 $path: $e，尝试提取子字体');
+      return await _extractTtcSubFont(path);
+    }
+  }
+
+  static Future<pw.Font?> _extractTtcSubFont(String ttcPath) async {
+    try {
+      final file = File(ttcPath);
+      final raf = file.openRead();
+      final header = List<int>.filled(12, 0);
+      await raf.readInto(header);
+      await raf.close();
+
+      if (header[0] != 0x00 ||
+          header[1] != 0x01 ||
+          header[2] != 0x00 ||
+          header[3] != 0x00) {
+        return null;
+      }
+
+      final fontCount = ByteData.sublistView(Uint8List.fromList(header), 8, 12).getUint32(0);
+      if (fontCount <= 0 || fontCount > 100) return null;
+
+      // ignore: avoid_print
+      print('[PdfExporter] TTC包含$fontCount个子字体，尝试提取第一个');
+
+      try {
+        final fullBytes = await file.readAsBytes();
+        final offsetTableOffset = 12;
+        final offsetBytes = List<int>.generate(fontCount * 4, (i) => fullBytes[offsetTableOffset + i]);
+        final bd = ByteData.sublistView(Uint8List.fromList(offsetBytes));
+        final firstFontOffset = bd.getUint32(0);
+
+        final fontData = Uint8List.fromList(
+            fullBytes.sublist(firstFontOffset, fullBytes.length),
+        );
+
+        final font = pw.Font.ttf(fontData.buffer.asByteData());
+        if (_validateFont(font)) {
+          // ignore: avoid_print
+          print('[PdfExporter] 成功从TTC提取子字体');
+          return font;
+        }
+        return null;
+      } catch (e) {
+        return null;
+      }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  static bool _validateFont(pw.Font font) {
+    try {
+      final testStyle = pw.TextStyle(font: font, fontSize: 12);
+      return testStyle.fontSize == 12;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<pw.Font?> _loadFallbackFont() async {
+    const fallbackPaths = [
+      '/system/fonts/DroidSansFallback.ttf',
+      '/system/fonts/DroidSansFallbackFull.ttf',
+      '/system/fonts/NotoSans-Regular.ttf',
+      '/system/fonts/DejaVuSans.ttf',
+    ];
+
+    for (final path in fallbackPaths) {
+      try {
+        final file = File(path);
+        if (!await file.exists()) continue;
+        final bytes = await file.readAsBytes();
+        if (bytes.length < 2048) continue;
+        final font = pw.Font.ttf(bytes.buffer.asByteData());
+        if (_validateFont(font)) {
+          return font;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  static Future<void> initializeFonts({bool forceRescan = false}) async {
+    if (forceRescan) {
+      _scanned = false;
+      _chineseFont = null;
+      _loadedFontPath = null;
+    }
+    await _scanAndLoadFonts();
+  }
+
+  static bool get hasChineseFont => _chineseFont != null;
+
+  static String? get loadedFontPath => _loadedFontPath;
+
+  static Future<bool> loadFontFromPath(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return false;
+      final bytes = await file.readAsBytes();
+      if (bytes.length < 2048) return false;
+
+      final font = pw.Font.ttf(bytes.buffer.asByteData());
+      if (_validateFont(font)) {
+        _chineseFont = font;
+        _loadedFontPath = path;
+        _scanned = true;
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static Future<List<String>> scanAvailableFonts() async {
+    final fonts = <String>[];
+
+    for (final dir in _systemFontDirs) {
+      try {
+        final d = Directory(dir);
+        if (!await d.exists()) continue;
+        await for (final f in d.list(recursive: true, followLinks: false)) {
+          if (f is! File) continue;
+          final lower = f.path.toLowerCase();
+          if (_isFontFile(lower)) {
+            try {
+              final bytes = await f.readAsBytes();
+              if (bytes.length >= 2048) {
+                fonts.add(f.path);
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
+    fonts.sort((a, b) => _fontScore(a).compareTo(_fontScore(b)));
+    return fonts;
   }
 
   /// 构造 ThemeData：
@@ -629,6 +845,8 @@ class PdfExporter {
       final now = DateTime.now();
       final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
 
+      await _scanAndLoadFonts();
+
       final markdown = _buildMarkdown(
         title: title,
         prompt: prompt,
@@ -639,6 +857,50 @@ class PdfExporter {
       );
 
       final errors = <String>[];
+
+      // L0：neom_docs 专业库渲染（仅适用于非中文、无图片的内容）
+      // neom_docs 使用 Open Sans 字体，不支持中文；且不支持 Markdown 图片语法
+      // 检测到中文或图片时直接跳过，进入 L1 自建渲染（支持中文字体和图片）
+      final hasChinese = RegExp(r'[\u4e00-\u9fff\u3400-\u4dbf]').hasMatch(markdown);
+      final hasImages = RegExp(r'!\[.*?\]\([^)]+\)').hasMatch(markdown);
+
+      if (!hasChinese && !hasImages) {
+        try {
+          final phase = 'L0_neom_docs';
+          // ignore: avoid_print
+          print('[PdfExporter] 尝试L0: neom_docs 专业库渲染 (非中文、无图片)');
+
+          final pdfBytes = await NeomPdfService.generateFromMarkdown(
+            content: markdown,
+            title: title,
+            theme: DocTheme(
+              accentColor: PdfColor.fromInt(0xFF0066CC),
+              accentDark: PdfColor.fromInt(0xFF004C99),
+              brandName: '社交塔子',
+              brandVersion: 'v1.0',
+              footerLeft: '社交塔子',
+              footerCenter: 'AI 任务中心',
+            ),
+          );
+
+          final f = await _writePdfFile(title, now, pdfBytes);
+          return (
+            file: f,
+            level: phase,
+            fallbackReport: errors.join('\n'),
+          );
+        } catch (e, st) {
+          final line = _formatError('L0_neom_docs', e, st);
+          errors.add(line);
+          // ignore: avoid_print
+          print('[PdfExporter] L0失败(将降级到自建渲染): $line');
+        }
+      } else {
+        final skipReason = hasChinese ? '内容含中文(neom_docs不支持)' : '内容含图片(neom_docs不支持)';
+        // ignore: avoid_print
+        print('[PdfExporter] 跳过L0_neom_docs: $skipReason，直接使用L1自建渲染');
+        errors.add('[L0_neom_docs] 跳过: $skipReason');
+      }
 
       for (var attempt = 1; attempt <= 3; attempt++) {
         final phase = 'L$attempt';

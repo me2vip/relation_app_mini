@@ -3,7 +3,7 @@ description: "社交塔子 - 智能社交搭子助手"
 publish_to: 'none'
 # 版本号唯一来源：x.y.z+build（+后为 Android versionCode），
 # 改一处 → gradle 自动同步（flutter.versionCode / flutter.versionName）
-version: 1.21.0+46
+version: 1.22.0+47
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -19,6 +19,9 @@ dependencies:
   # PDF导出和打印
   printing: ^5.14.2
   pdf: ^3.11.1
+  
+  # Markdown 转 PDF (专业库)
+  neom_docs: ^1.0.0
   
   # 文件路径
   path_provider: ^2.1.5
