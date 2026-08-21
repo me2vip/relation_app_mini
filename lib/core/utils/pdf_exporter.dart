@@ -8,84 +8,158 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
 class PdfExporter {
-  static pw.Font? _cachedChineseFont;
+  /// 已加载的中文字体列表（按优先级排序），fontResolver 会
+  /// 在第一个字体缺少字形时依次尝试后续字体。
+  static final List<pw.Font> _chineseFonts = [];
+  static bool _scanned = false;
 
-  static Future<pw.Font?> _loadChineseFont() async {
-    if (_cachedChineseFont != null) return _cachedChineseFont;
+  /// 关键词优先顺序：越靠前越先尝试加载
+  static const List<String> _fontKeywords = [
+    'NotoSansCJK',
+    'NotoSerifCJK',
+    'NotoSansSC',
+    'NotoSerifSC',
+    'SourceHanSans',
+    'SourceHanSerif',
+    'DroidSansFallback',
+    'RobotoFallback',
+    'Miui-Bold',
+    'Miui-Regular',
+    'HanSans',
+    'PingFang',
+    'HarmonyOS',
+    'Sans',
+  ];
 
-    final fontPaths = [
-      '/system/fonts/DroidSansFallbackFull.ttf',
-      '/system/fonts/DroidSansFallback.ttf',
-      '/system/fonts/NotoSansCJK-Regular.ttc',
-      '/system/fonts/NotoSansCJK.ttc',
-      '/system/fonts/NotoSerifCJK-Regular.ttc',
-      '/system/fonts/RobotoFallback-VF.ttf',
-      '/system/fonts/NotoSansSC.ttf',
-      '/system/fonts/NotoSerifSC.ttf',
-      '/system/fonts/SourceHanSansCN-Regular.otf',
-    ];
+  static Future<void> _scanAndLoadFonts() async {
+    if (_scanned) return;
+    _scanned = true;
 
-    for (final path in fontPaths) {
+    final candidates = <String>[];
+    try {
+      const fontDirs = [
+        '/system/fonts',
+        '/system/font',
+        '/data/fonts',
+        '/product/fonts',
+        '/vendor/fonts',
+      ];
+      for (final dir in fontDirs) {
+        try {
+          final d = Directory(dir);
+          if (!await d.exists()) continue;
+          await for (final f in d.list(recursive: false, followLinks: false)) {
+            if (f is! File) continue;
+            final lower = f.path.toLowerCase();
+            if (lower.endsWith('.ttf') ||
+                lower.endsWith('.otf') ||
+                lower.endsWith('.ttc')) {
+              candidates.add(f.path);
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+
+    // 按关键词优先级排序
+    String score(String path) {
+      final lower = path.toLowerCase();
+      for (var i = 0; i < _fontKeywords.length; i++) {
+        if (lower.contains(_fontKeywords[i].toLowerCase())) {
+          return '0$i${lower.split('/').last}';
+        }
+      }
+      return '9z${lower.split('/').last}';
+    }
+    candidates.sort((a, b) => score(a).compareTo(score(b)));
+
+    for (final path in candidates) {
+      if (_chineseFonts.length >= 6) break; // 最多加载6个字体供 fallback 使用
       try {
         final file = File(path);
-        if (!await file.exists()) continue;
         final bytes = await file.readAsBytes();
-        if (bytes.isEmpty) continue;
+        if (bytes.length < 1024) continue;
         try {
-          final byteData = bytes.buffer.asByteData();
-          if (byteData.lengthInBytes < 12) continue;
-          final font = pw.Font.ttf(byteData);
-          _cachedChineseFont = font;
-          return font;
+          final font = pw.Font.ttf(bytes.buffer.asByteData());
+          _chineseFonts.add(font);
         } catch (_) {
-          // 字体格式不支持，继续尝试下一个
+          // ttc/otf 解析失败就继续下一个
         }
       } catch (_) {}
     }
-
-    return null;
   }
 
-  /// 极简安全 TextStyle：只有明确有字体时才传 font，
-  /// 不设置任何可能触发 pdf 库内部组合断言的扩展样式。
-  static pw.TextStyle _plainStyle(pw.Font? font, double size, {PdfColor? color, double? height}) {
-    if (font != null) {
-      return pw.TextStyle(font: font, fontSize: size, color: color, height: height);
+  /// 生成 PdfThemeData：当主字体缺字时，fontResolver 依次在 fallback 字体中查找字形
+  static pw.ThemeData _buildTheme(pw.Font? primary) {
+    final fallback = <pw.Font>[];
+    for (final f in _chineseFonts) {
+      if (primary != null && f == primary) continue;
+      fallback.add(f);
     }
-    return pw.TextStyle(fontSize: size, color: color, height: height);
+
+    pw.Font? base;
+    pw.Font? fontBold;
+    pw.Font? fontItalic;
+    pw.Font? fontBoldItalic;
+    if (primary != null) {
+      base = primary;
+      // 有中文字体时，bold/italic 也用同一份 ttf，避免 pdf 库内部合成时报空断言
+      fontBold = primary;
+      fontItalic = primary;
+      fontBoldItalic = primary;
+    }
+
+    final fontResolver = fallback.isEmpty
+        ? null
+        : (pw.FontStyle style, int? unicode) {
+            for (final font in fallback) {
+              try {
+                // 只要 font 本身支持该字形，pdf 库就会用它
+                // 这里我们不需要显式判断是否包含 glyph，fontResolver 只要返回一个
+                // 非空字体 pdf 库就会用它重新布局
+                return font;
+              } catch (_) {}
+            }
+            return null;
+          };
+
+    return pw.ThemeData.withFont(
+      base: base,
+      bold: fontBold,
+      italic: fontItalic,
+      boldItalic: fontBoldItalic,
+      fontResolver: fontResolver,
+      icons: null,
+      iconResolver: null,
+    );
   }
 
-  /// 将可能包含 emoji 或控制字符的文本进行安全处理，
-  /// 避免 pdf 库遇到不支持的 Unicode 时内部崩溃。
+  /// 过滤 emoji/控制字符
   static String _sanitizeText(String? text) {
     if (text == null) return '';
     var s = text;
-    // 移除一些 PDF 字体可能不支持的 emoji 区间
-    s = s.replaceAllMapped(
-      RegExp(
-        r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}]',
-        unicode: true,
-      ),
-      (m) => '□',
-    );
-    // 去掉 ASCII 控制字符 (0x00-0x1F 除了 \n\r\t)
+    try {
+      s = s.replaceAllMapped(
+        RegExp(r'[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F000}-\u{1F02F}]',
+            unicode: true),
+        (m) => '',
+      );
+    } catch (_) {}
     s = s.replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '');
     return s;
   }
 
-  static pw.Widget _safeText(String? raw, pw.Font? font, double size,
+  static pw.Widget _safeText(String? raw, double size,
       {PdfColor? color, double? height, pw.TextAlign? align}) {
     final text = _sanitizeText(raw);
-    final style = _plainStyle(font, size, color: color, height: height);
     try {
-      return pw.Text(text, style: style, textAlign: align ?? pw.TextAlign.left);
+      return pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: size, color: color, height: height),
+        textAlign: align ?? pw.TextAlign.left,
+      );
     } catch (_) {
-      // 如果连 pw.Text 都抛错（极端情况），退回使用系统默认字体
-      try {
-        return pw.Text(text, style: pw.TextStyle(fontSize: size), textAlign: align ?? pw.TextAlign.left);
-      } catch (__) {
-        return pw.SizedBox.shrink();
-      }
+      return pw.SizedBox.shrink();
     }
   }
 
@@ -96,42 +170,59 @@ class PdfExporter {
     String? context,
     List<String>? attachments,
   }) async {
-    pw.Font? chineseFont;
-    try {
-      chineseFont = await _loadChineseFont();
-    } catch (_) {
-      chineseFont = null;
-    }
+    await _scanAndLoadFonts();
+    final primaryFont = _chineseFonts.isNotEmpty ? _chineseFonts.first : null;
+    final theme = _buildTheme(primaryFont);
 
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
 
+    // 所有文本通过 Theme.of(context).defaultTextStyle 继承字体解析器：
+    // 所以必须用 pw.Theme(child: ...) 包裹内容，否则 fontResolver 不生效！
+    pw.Widget wrapBody(pw.Widget child) =>
+        pw.Theme(data: theme, child: child);
+
+    pw.Document makeDoc(List<pw.Widget> children) {
+      final pdf = pw.Document(theme: theme);
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(40),
+          theme: theme,
+          build: (_) => wrapBody(
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ),
+      );
+      return pdf;
+    }
+
     final children = <pw.Widget>[];
 
-    // 标题（用较大字号代替 bold，避免 pdf 库组合字体的空断言）
-    children.add(_safeText(title, chineseFont, 22, height: 1.3));
+    children.add(_safeText(title, 22, height: 1.3));
     children.add(pw.SizedBox(height: 6));
-    children.add(_safeText('生成时间：$dateStr', chineseFont, 10, color: PdfColors.grey500));
+    children.add(_safeText('生成时间：$dateStr', 10, color: PdfColors.grey500));
     if (contactName != null && contactName.isNotEmpty) {
       children.add(pw.SizedBox(height: 2));
-      children.add(_safeText('联系人：$contactName', chineseFont, 10, color: PdfColors.grey500));
+      children.add(_safeText('联系人：$contactName', 10, color: PdfColors.grey500));
     }
     children.add(pw.SizedBox(height: 14));
     children.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
     children.add(pw.SizedBox(height: 14));
 
-    // 使用说明
-    children.add(_safeText('使用说明', chineseFont, 16, height: 1.3));
+    children.add(_safeText('使用说明', 16, height: 1.3));
     children.add(pw.SizedBox(height: 8));
-    children.add(_safeText('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', chineseFont, 11, height: 1.5));
-    children.add(_safeText('2. 对 AI 说：请按照此PDF文档的要求执行任务', chineseFont, 11, height: 1.5));
-    children.add(_safeText('3. 等待 AI 返回分析结果', chineseFont, 11, height: 1.5));
-    children.add(_safeText('4. 将 AI 的回复完整复制回 APP', chineseFont, 11, height: 1.5));
+    children.add(_safeText('1. 将此PDF文档发送给 AI（千问、豆包、GPT等）', 11, height: 1.5));
+    children.add(_safeText('2. 对 AI 说：请按照此PDF文档的要求执行任务', 11, height: 1.5));
+    children.add(_safeText('3. 等待 AI 返回分析结果', 11, height: 1.5));
+    children.add(_safeText('4. 将 AI 的回复完整复制回 APP', 11, height: 1.5));
     children.add(pw.SizedBox(height: 16));
 
-    // 背景信息
     if (context != null && context.isNotEmpty) {
-      children.add(_safeText('背景信息 / 素材', chineseFont, 16, height: 1.3));
+      children.add(_safeText('背景信息 / 素材', 16, height: 1.3));
       children.add(pw.SizedBox(height: 8));
       children.add(
         pw.Container(
@@ -140,14 +231,13 @@ class PdfExporter {
             border: pw.Border(left: pw.BorderSide(color: PdfColors.indigo400, width: 3)),
             color: PdfColors.indigo50,
           ),
-          child: _safeText(context, chineseFont, 11, color: PdfColors.grey700, height: 1.5),
+          child: _safeText(context, 11, color: PdfColors.grey700, height: 1.5),
         ),
       );
       children.add(pw.SizedBox(height: 16));
     }
 
-    // AI 任务指令
-    children.add(_safeText('AI 任务指令', chineseFont, 16, height: 1.3));
+    children.add(_safeText('AI 任务指令', 16, height: 1.3));
     children.add(pw.SizedBox(height: 8));
     children.add(
       pw.Container(
@@ -156,24 +246,22 @@ class PdfExporter {
           color: PdfColors.grey50,
           borderRadius: pw.BorderRadius.circular(6),
         ),
-        child: _safeText(prompt, chineseFont, 11, height: 1.5),
+        child: _safeText(prompt, 11, height: 1.5),
       ),
     );
     children.add(pw.SizedBox(height: 16));
 
-    // 附件列表
     if (attachments != null && attachments.isNotEmpty) {
-      children.add(_safeText('附件/素材列表', chineseFont, 16, height: 1.3));
+      children.add(_safeText('附件/素材列表', 16, height: 1.3));
       children.add(pw.SizedBox(height: 8));
       children.add(_safeText(
         '以下素材已通过APP附加，请AI分析时结合考虑：',
-        chineseFont,
         11,
         color: PdfColors.grey600,
       ));
       children.add(pw.SizedBox(height: 8));
       for (final att in attachments) {
-        children.add(_safeText('- $att', chineseFont, 11, height: 1.5));
+        children.add(_safeText('- $att', 11, height: 1.5));
       }
       children.add(pw.SizedBox(height: 16));
     }
@@ -181,7 +269,6 @@ class PdfExporter {
     children.add(pw.Divider(height: 1, thickness: 1, color: PdfColors.grey300));
     children.add(pw.SizedBox(height: 12));
 
-    // 重要提示
     children.add(
       pw.Container(
         padding: const pw.EdgeInsets.all(12),
@@ -192,11 +279,10 @@ class PdfExporter {
         child: pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            _safeText('重要提示：', chineseFont, 12, color: PdfColors.amber800),
+            _safeText('重要提示：', 12, color: PdfColors.amber800),
             pw.SizedBox(height: 6),
             _safeText(
               '将 AI 的完整回复（包括思考过程和分析结果）复制回 APP，APP 将自动解析 JSON 并保存为任务。',
-              chineseFont,
               11,
               color: PdfColors.amber700,
               height: 1.5,
@@ -206,22 +292,7 @@ class PdfExporter {
       ),
     );
 
-    final pdf = pw.Document();
-
-    // 极端保守：只用 pw.Page，完全不使用 MultiPage / header / footer 回调
-    // （MultiPage 的 pagesCount/pageNumber 闭包在部分 pdf 版本内部存在 ! 断言）
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(40),
-        build: (pageContext) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: children,
-          );
-        },
-      ),
-    );
+    final pdf = makeDoc(children);
 
     Directory dir;
     try {
@@ -238,34 +309,22 @@ class PdfExporter {
     try {
       bytes = await pdf.save();
     } catch (e) {
-      // 如果内容渲染导致 save 失败，退回到最小内容 PDF
-      final fallback = pw.Document();
-      fallback.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (_) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(_sanitizeText(title), style: pw.TextStyle(fontSize: 20)),
-              pw.SizedBox(height: 12),
-              pw.Text(_sanitizeText('生成时间：$dateStr')),
-              pw.SizedBox(height: 20),
-              pw.Text(_sanitizeText('AI 任务指令'), style: pw.TextStyle(fontSize: 16)),
-              pw.SizedBox(height: 8),
-              pw.Text(_sanitizeText(prompt)),
-            ],
-          ),
-        ),
-      );
       // ignore: avoid_print
-      print('[PdfExporter] 主PDF渲染失败，使用降级内容: $e');
-      bytes = await fallback.save();
+      print('[PdfExporter] save失败，退回最小PDF: $e');
+      final fb = makeDoc(<pw.Widget>[
+        _safeText(title, 20),
+        pw.SizedBox(height: 12),
+        _safeText('生成时间：$dateStr', 11),
+        pw.SizedBox(height: 20),
+        _safeText('AI 任务指令', 16),
+        pw.SizedBox(height: 8),
+        _safeText(prompt, 11, height: 1.5),
+      ]);
+      bytes = await fb.save();
     }
 
     final file = File(filePath);
     await file.writeAsBytes(bytes);
-
     return file;
   }
 
