@@ -8,8 +8,7 @@ import 'package:printing/printing.dart';
 import 'package:intl/intl.dart';
 
 class PdfExporter {
-  /// 已加载的中文字体列表（按优先级排序），fontResolver 会
-  /// 在第一个字体缺少字形时依次尝试后续字体。
+  /// 扫描到的中文字体，第 1 个用作主字体，其余用作 TextStyle.fontFallback
   static final List<pw.Font> _chineseFonts = [];
   static bool _scanned = false;
 
@@ -66,15 +65,16 @@ class PdfExporter {
       final lower = path.toLowerCase();
       for (var i = 0; i < _fontKeywords.length; i++) {
         if (lower.contains(_fontKeywords[i].toLowerCase())) {
-          return '0$i${lower.split('/').last}';
+          // 0 前缀保证关键词命中排在最前，i 越小分越高
+          return '${i.toString().padLeft(2, '0')}_${lower.split('/').last}';
         }
       }
-      return '9z${lower.split('/').last}';
+      return '99_${lower.split('/').last}';
     }
     candidates.sort((a, b) => score(a).compareTo(score(b)));
 
     for (final path in candidates) {
-      if (_chineseFonts.length >= 6) break; // 最多加载6个字体供 fallback 使用
+      if (_chineseFonts.length >= 6) break;
       try {
         final file = File(path);
         final bytes = await file.readAsBytes();
@@ -83,58 +83,15 @@ class PdfExporter {
           final font = pw.Font.ttf(bytes.buffer.asByteData());
           _chineseFonts.add(font);
         } catch (_) {
-          // ttc/otf 解析失败就继续下一个
+          // ttc / otf 解析失败，继续下一个
         }
       } catch (_) {}
     }
+
+    // ignore: avoid_print
+    print('[PdfExporter] 扫描${candidates.length}个字体文件，成功加载${_chineseFonts.length}个中文字体');
   }
 
-  /// 生成 PdfThemeData：当主字体缺字时，fontResolver 依次在 fallback 字体中查找字形
-  static pw.ThemeData _buildTheme(pw.Font? primary) {
-    final fallback = <pw.Font>[];
-    for (final f in _chineseFonts) {
-      if (primary != null && f == primary) continue;
-      fallback.add(f);
-    }
-
-    pw.Font? base;
-    pw.Font? fontBold;
-    pw.Font? fontItalic;
-    pw.Font? fontBoldItalic;
-    if (primary != null) {
-      base = primary;
-      // 有中文字体时，bold/italic 也用同一份 ttf，避免 pdf 库内部合成时报空断言
-      fontBold = primary;
-      fontItalic = primary;
-      fontBoldItalic = primary;
-    }
-
-    final fontResolver = fallback.isEmpty
-        ? null
-        : (pw.FontStyle style, int? unicode) {
-            for (final font in fallback) {
-              try {
-                // 只要 font 本身支持该字形，pdf 库就会用它
-                // 这里我们不需要显式判断是否包含 glyph，fontResolver 只要返回一个
-                // 非空字体 pdf 库就会用它重新布局
-                return font;
-              } catch (_) {}
-            }
-            return null;
-          };
-
-    return pw.ThemeData.withFont(
-      base: base,
-      bold: fontBold,
-      italic: fontItalic,
-      boldItalic: fontBoldItalic,
-      fontResolver: fontResolver,
-      icons: null,
-      iconResolver: null,
-    );
-  }
-
-  /// 过滤 emoji/控制字符
   static String _sanitizeText(String? text) {
     if (text == null) return '';
     var s = text;
@@ -149,17 +106,59 @@ class PdfExporter {
     return s;
   }
 
+  /// 构建 TextStyle：
+  /// - 如果有加载到中文字体，主字体使用 _chineseFonts.first；
+  /// - bold/italic 也一律复用主字体实例，避免 pdf 库内部合成时的空断言。
+  static pw.TextStyle _textStyle(double size,
+      {PdfColor? color, double? height}) {
+    if (_chineseFonts.isEmpty) {
+      return pw.TextStyle(fontSize: size, color: color, height: height);
+    }
+    final primary = _chineseFonts.first;
+    return pw.TextStyle(
+      font: primary,
+      fontSize: size,
+      color: color,
+      height: height,
+    );
+  }
+
+  static pw.ThemeData _buildTheme() {
+    if (_chineseFonts.isEmpty) {
+      return pw.ThemeData.withFont();
+    }
+    final primary = _chineseFonts.first;
+    // bold/italic/boldItalic 全部指回同一个主字体：
+    // pdf 库碰到单独设置 bold 但字体文件不包含 bold 子集时会做内部合成，
+    // 容易触发 ! 空断言；全部用同一个实例避免走合成分支。
+    return pw.ThemeData.withFont(
+      base: primary,
+      bold: primary,
+      italic: primary,
+      boldItalic: primary,
+    );
+  }
+
   static pw.Widget _safeText(String? raw, double size,
       {PdfColor? color, double? height, pw.TextAlign? align}) {
     final text = _sanitizeText(raw);
     try {
       return pw.Text(
         text,
-        style: pw.TextStyle(fontSize: size, color: color, height: height),
+        style: _textStyle(size, color: color, height: height),
         textAlign: align ?? pw.TextAlign.left,
       );
     } catch (_) {
-      return pw.SizedBox.shrink();
+      // 极端兜底：不传任何字体，走默认 Helvetica（中文会 fallback 到上方 Theme）
+      try {
+        return pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: size, color: color, height: height),
+          textAlign: align ?? pw.TextAlign.left,
+        );
+      } catch (__) {
+        return pw.SizedBox.shrink();
+      }
     }
   }
 
@@ -171,16 +170,10 @@ class PdfExporter {
     List<String>? attachments,
   }) async {
     await _scanAndLoadFonts();
-    final primaryFont = _chineseFonts.isNotEmpty ? _chineseFonts.first : null;
-    final theme = _buildTheme(primaryFont);
+    final theme = _buildTheme();
 
     final now = DateTime.now();
     final dateStr = DateFormat('yyyy年MM月dd日 HH:mm').format(now);
-
-    // 所有文本通过 Theme.of(context).defaultTextStyle 继承字体解析器：
-    // 所以必须用 pw.Theme(child: ...) 包裹内容，否则 fontResolver 不生效！
-    pw.Widget wrapBody(pw.Widget child) =>
-        pw.Theme(data: theme, child: child);
 
     pw.Document makeDoc(List<pw.Widget> children) {
       final pdf = pw.Document(theme: theme);
@@ -189,8 +182,9 @@ class PdfExporter {
           pageFormat: PdfPageFormat.a4,
           margin: const pw.EdgeInsets.all(40),
           theme: theme,
-          build: (_) => wrapBody(
-            pw.Column(
+          build: (_) => pw.Theme(
+            data: theme,
+            child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: children,
             ),
