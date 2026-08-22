@@ -5,13 +5,13 @@ import '../../services/storage_service.dart';
 
 /// 社交途径管理
 ///
-/// 管理联系渠道（微信/QQ/线下/抖音等）的增删改查，
-/// 以及联系人与渠道的关联关系。
+/// 管理联系渠道（微信/QQ/线下/抖音等）的增删改查。
+/// 联系人与渠道的关联统一通过 [ChannelConfigProvider] 使用
+/// ContactChannelConfig（含 channelId）进行管理。
 class ChannelProvider extends ChangeNotifier {
   final _uuid = const Uuid();
 
   List<SocialChannel> _channels = [];
-  Map<String, List<ContactChannelLink>> _contactLinks = {}; // contactId -> links
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -32,6 +32,47 @@ class ChannelProvider extends ChangeNotifier {
       _channels = await DatabaseService.getAllChannels();
       if (_channels.isEmpty) {
         await _createDefaultChannels();
+      } else {
+        // 迁移：旧渠道可能没有 platformKey（均为 'custom'），按名称回写并持久化一次
+        bool migrated = false;
+        final now = DateTime.now();
+        for (int i = 0; i < _channels.length; i++) {
+          final c = _channels[i];
+          if (c.platformKey == 'custom' || c.platformKey.isEmpty) {
+            final defaults = defaultChannels;
+            final match = defaults.firstWhere(
+              (d) => d['name'] == c.name,
+              orElse: () => const {},
+            );
+            if (match.containsKey('platformKey')) {
+              _channels[i] = c.copyWith(platformKey: match['platformKey'], updatedAt: now);
+              await DatabaseService.saveChannel(_channels[i]);
+              migrated = true;
+            }
+          }
+        }
+        if (migrated) {
+          _channels = await DatabaseService.getAllChannels();
+        }
+        // 补齐缺失的默认渠道（若用户升级后有新增默认项）
+        for (final def in defaultChannels) {
+          final exists = _channels.any((c) => c.name == def['name']);
+          if (!exists) {
+            final ch = SocialChannel(
+              id: _uuid.v4(),
+              name: def['name']!,
+              icon: def['icon']!,
+              isDefault: true,
+              platformKey: def['platformKey'] ?? 'custom',
+              createdAt: now,
+              updatedAt: now,
+            );
+            await DatabaseService.saveChannel(ch);
+          }
+        }
+        if (_channels.length != defaultChannels.length) {
+          _channels = await DatabaseService.getAllChannels();
+        }
       }
       _isLoading = false;
       notifyListeners();
@@ -50,12 +91,29 @@ class ChannelProvider extends ChangeNotifier {
         name: entry['name']!,
         icon: entry['icon']!,
         isDefault: true,
+        platformKey: entry['platformKey'] ?? 'custom',
         createdAt: now,
         updatedAt: now,
       );
       await DatabaseService.saveChannel(channel);
     }
     _channels = await DatabaseService.getAllChannels();
+  }
+
+  /// 基于名称查找已存在的渠道；找不到返回 null（用于新建默认缺失项）
+  SocialChannel? findByName(String name) {
+    for (final c in _channels) {
+      if (c.name == name) return c;
+    }
+    return null;
+  }
+
+  /// 基于 platformKey 查找已存在的渠道
+  SocialChannel? findByPlatformKey(String key) {
+    for (final c in _channels) {
+      if (c.platformKey == key) return c;
+    }
+    return null;
   }
 
   SocialChannel? getChannelById(String id) {
@@ -71,6 +129,7 @@ class ChannelProvider extends ChangeNotifier {
     required String name,
     String icon = '🔗',
     String? description,
+    String platformKey = 'custom',
   }) async {
     final now = DateTime.now();
     final channel = SocialChannel(
@@ -79,6 +138,7 @@ class ChannelProvider extends ChangeNotifier {
       icon: icon,
       description: description,
       isDefault: false,
+      platformKey: platformKey,
       createdAt: now,
       updatedAt: now,
     );
@@ -113,7 +173,7 @@ class ChannelProvider extends ChangeNotifier {
     }
   }
 
-  /// 删除途径（同时删除关联）
+  /// 删除途径
   Future<void> deleteChannel(String channelId) async {
     final idx = _channels.indexWhere((c) => c.id == channelId);
     final removed = idx >= 0 ? _channels.removeAt(idx) : null;
@@ -123,87 +183,6 @@ class ChannelProvider extends ChangeNotifier {
     } catch (e) {
       if (removed != null) {
         _channels.insert(idx, removed);
-        notifyListeners();
-      }
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
-  }
-
-  // ========== 联系人-途径关联 ==========
-
-  /// 获取某联系人的所有关联
-  List<ContactChannelLink> getLinksByContact(String contactId) {
-    return _contactLinks[contactId] ?? [];
-  }
-
-  /// 加载某联系人的关联（缓存）
-  Future<void> loadContactLinks(String contactId) async {
-    try {
-      final links = await DatabaseService.getContactChannelLinks(contactId);
-      _contactLinks[contactId] = links;
-      notifyListeners();
-    } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
-  }
-
-  /// 添加/更新联系人与途径的关联
-  Future<void> saveContactLink({
-    required String contactId,
-    required String channelId,
-    required String account,
-    String? remark,
-  }) async {
-    final now = DateTime.now();
-    final current = List<ContactChannelLink>.from(_contactLinks[contactId] ?? []);
-    final existingIdx = current.indexWhere((l) => l.channelId == channelId);
-    final original = existingIdx >= 0 ? current[existingIdx] : null;
-    final link = ContactChannelLink(
-      id: original?.id ?? _uuid.v4(),
-      contactId: contactId,
-      channelId: channelId,
-      account: account,
-      remark: remark,
-      createdAt: original?.createdAt ?? now,
-    );
-    if (existingIdx >= 0) {
-      current[existingIdx] = link;
-    } else {
-      current.add(link);
-    }
-    _contactLinks[contactId] = current;
-    notifyListeners();
-    try {
-      await DatabaseService.saveContactChannelLink(link);
-    } catch (e) {
-      if (original != null && existingIdx >= 0) {
-        current[existingIdx] = original;
-      } else {
-        current.removeWhere((l) => l.id == link.id);
-      }
-      _contactLinks[contactId] = current;
-      _errorMessage = e.toString();
-      notifyListeners();
-    }
-  }
-
-  /// 删除联系人与途径的关联
-  Future<void> removeContactLink(String linkId, String contactId) async {
-    final current = List<ContactChannelLink>.from(_contactLinks[contactId] ?? []);
-    final idx = current.indexWhere((l) => l.id == linkId);
-    final removed = idx >= 0 ? current.removeAt(idx) : null;
-    if (idx >= 0) {
-      _contactLinks[contactId] = current;
-      notifyListeners();
-    }
-    try {
-      await DatabaseService.deleteContactChannelLink(linkId);
-    } catch (e) {
-      if (removed != null) {
-        current.insert(idx, removed);
-        _contactLinks[contactId] = current;
         notifyListeners();
       }
       _errorMessage = e.toString();

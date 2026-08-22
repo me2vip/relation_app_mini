@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/providers/contact_provider.dart';
 import '../../core/providers/channel_config_provider.dart';
+import '../../core/providers/channel_provider.dart';
 import '../../models/contact.dart';
 import '../../models/channel.dart';
 import '../../models/social_channel_config.dart';
@@ -380,6 +381,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
     for (final config in _pendingChannelConfigs) {
       channelProvider.addConfig(
         contactId: id,
+        channelId: config.channelId,
         platform: config.platform,
         account: config.account,
         remark: config.remark,
@@ -772,7 +774,13 @@ class _ContactEditPageState extends State<ContactEditPage> {
                                       ),
                                       icon: const Icon(Icons.add_circle_outline),
                                       label: const Text('添加社交途径', style: TextStyle(fontWeight: FontWeight.w600)),
-                                      onPressed: () => _addChannelConfig(channelProvider, existingConfigs.length),
+                                      onPressed: () {
+                                        final usedChannelIds = <String>{
+                                          ...existingConfigs.map((c) => c.channelId).where((id) => id.isNotEmpty),
+                                          ..._pendingChannelConfigs.map((c) => c.channelId).where((id) => id.isNotEmpty),
+                                        };
+                                        _addChannelConfig(channelProvider, existingConfigs.length, usedChannelIds);
+                                      },
                                     ),
                                   ),
                                 ),
@@ -1017,8 +1025,21 @@ class _ContactEditPageState extends State<ContactEditPage> {
     );
   }
 
-  void _addChannelConfig(ChannelConfigProvider channelProvider, int existingCount) {
-    SocialPlatform selectedPlatform = SocialPlatform.wechat;
+  void _addChannelConfig(ChannelConfigProvider channelProvider, int existingCount, Set<String> usedChannelIds) {
+    final allChannels = context.read<ChannelProvider>().channels;
+    // 过滤掉已使用过的渠道（避免同一联系人重复添加）
+    final availableChannels = allChannels.where((ch) => !usedChannelIds.contains(ch.id)).toList();
+    if (availableChannels.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已添加所有可用途径，无需重复添加')),
+      );
+      return;
+    }
+    SocialChannel selectedChannel = availableChannels.first;
+    SocialPlatform getPlatform() => selectedChannel.platform;
+    PlatformConfig getPlatformCfg() => resolvePlatformConfig(
+          getPlatform(), selectedChannel.name, selectedChannel.icon,
+        );
     final accountCtrl = TextEditingController();
     final remarkCtrl = TextEditingController();
     List<ChannelFeature> enabledFeatures = [];
@@ -1055,38 +1076,45 @@ class _ContactEditPageState extends State<ContactEditPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('选择平台', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+                  const Text('选择途径', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
                   const SizedBox(height: 8),
                   Container(
-                    height: 46,
+                    height: 50,
                     child: ListView(
                       scrollDirection: Axis.horizontal,
-                      children: kPlatformConfigs.map((p) {
-                        final selected = p.platform == selectedPlatform;
+                      children: availableChannels.map((ch) {
+                        final cfg = resolvePlatformConfig(
+                          ch.platform, ch.name, ch.icon,
+                        );
+                        final selected = ch.id == selectedChannel.id;
                         return Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: GestureDetector(
-                            onTap: () => setDialogState(() => selectedPlatform = p.platform),
+                            onTap: () => setDialogState(() {
+                              selectedChannel = ch;
+                              enabledFeatures = [];
+                              preferredModes = [];
+                            }),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               decoration: BoxDecoration(
-                                color: selected ? p.color.withOpacity( 0.15) : Colors.grey.shade100,
+                                color: selected ? cfg.color.withOpacity(0.15) : Colors.grey.shade100,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(
-                                  color: selected ? p.color : Colors.transparent,
+                                  color: selected ? cfg.color : Colors.transparent,
                                   width: selected ? 2 : 0,
                                 ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(p.emoji, style: const TextStyle(fontSize: 16)),
+                                  Text(ch.icon, style: const TextStyle(fontSize: 16)),
                                   const SizedBox(width: 6),
-                                  Text(p.name,
+                                  Text(ch.name,
                                     style: TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      color: selected ? p.color : Colors.black54,
+                                      color: selected ? cfg.color : Colors.black54,
                                     )),
                                 ],
                               ),
@@ -1103,7 +1131,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
                   const SizedBox(height: 16),
                   const Text('启用功能', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
                   const SizedBox(height: 8),
-                  _buildFeatureChips(selectedPlatform, enabledFeatures, setDialogState),
+                  _buildFeatureChips(getPlatform(), enabledFeatures, setDialogState),
                   const SizedBox(height: 16),
                   const Text('偏好互动方式', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
                   const SizedBox(height: 8),
@@ -1146,10 +1174,12 @@ class _ContactEditPageState extends State<ContactEditPage> {
                             shadowColor: Colors.transparent,
                           ),
                           onPressed: () {
+                            final platform = getPlatform();
                             final config = ContactChannelConfig(
                               id: _uuid.v4(),
                               contactId: widget.contact?.id ?? '_pending',
-                              platform: selectedPlatform,
+                              channelId: selectedChannel.id,
+                              platform: platform,
                               account: accountCtrl.text.trim().isEmpty ? null : accountCtrl.text.trim(),
                               remark: remarkCtrl.text.trim().isEmpty ? null : remarkCtrl.text.trim(),
                               enabledFeatures: enabledFeatures,
@@ -1161,7 +1191,8 @@ class _ContactEditPageState extends State<ContactEditPage> {
                             if (_isEditing) {
                               channelProvider.addConfig(
                                 contactId: widget.contact!.id,
-                                platform: selectedPlatform,
+                                channelId: selectedChannel.id,
+                                platform: platform,
                                 account: config.account,
                                 remark: config.remark,
                                 enabledFeatures: enabledFeatures,

@@ -14,7 +14,7 @@ import '../models/channel.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'relation_app_mini.db';
-  static const int _dbVersion = 5;
+  static const int _dbVersion = 6;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -148,22 +148,9 @@ class DatabaseService {
         icon TEXT,
         description TEXT,
         is_default INTEGER DEFAULT 0,
+        platform_key TEXT DEFAULT 'custom',
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
-      )
-    ''');
-
-    // 联系人-社交途径关联表
-    await db.execute('''
-      CREATE TABLE contact_channel_links (
-        id TEXT PRIMARY KEY,
-        contact_id TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        account TEXT NOT NULL,
-        remark TEXT,
-        created_at TEXT NOT NULL,
-        FOREIGN KEY (contact_id) REFERENCES contacts(id),
-        FOREIGN KEY (channel_id) REFERENCES social_channels(id)
       )
     ''');
 
@@ -405,24 +392,15 @@ class DatabaseService {
           icon TEXT,
           description TEXT,
           is_default INTEGER DEFAULT 0,
+          platform_key TEXT DEFAULT 'custom',
           created_at TEXT NOT NULL,
           updated_at TEXT NOT NULL
         )
       ''');
-
-      // 联系人-社交途径关联表
-      await db.execute('''
-        CREATE TABLE IF NOT EXISTS contact_channel_links (
-          id TEXT PRIMARY KEY,
-          contact_id TEXT NOT NULL,
-          channel_id TEXT NOT NULL,
-          account TEXT NOT NULL,
-          remark TEXT,
-          created_at TEXT NOT NULL,
-          FOREIGN KEY (contact_id) REFERENCES contacts(id),
-          FOREIGN KEY (channel_id) REFERENCES social_channels(id)
-        )
-      ''');
+      // 兼容旧库：platform_key 列迁移
+      try {
+        await db.execute('ALTER TABLE social_channels ADD COLUMN platform_key TEXT DEFAULT \'custom\'');
+      } catch (_) {}
 
       // 人设信息项表
       await db.execute('''
@@ -465,6 +443,10 @@ class DatabaseService {
       if (!hasCaptionsByGroup) {
         await db.execute('ALTER TABLE temp_materials ADD COLUMN captions_by_group TEXT');
       }
+    }
+    if (oldVersion < 6) {
+      // 删除废弃的 contact_channel_links 表，关联关系统一走 ChannelConfigProvider（SharedPreferences）
+      await db.execute('DROP TABLE IF EXISTS contact_channel_links');
     }
   }
 
@@ -971,6 +953,7 @@ class DatabaseService {
       icon: m['icon'] as String? ?? '📱',
       description: m['description'] as String?,
       isDefault: (m['is_default'] as int?) == 1,
+      platformKey: m['platform_key'] as String? ?? 'custom',
       createdAt: DateTime.parse(m['created_at'] as String),
       updatedAt: DateTime.parse(m['updated_at'] as String),
     )).toList();
@@ -986,6 +969,7 @@ class DatabaseService {
         'icon': channel.icon,
         'description': channel.description,
         'is_default': channel.isDefault ? 1 : 0,
+        'platform_key': channel.platformKey,
         'created_at': channel.createdAt.toIso8601String(),
         'updated_at': channel.updatedAt.toIso8601String(),
       },
@@ -996,47 +980,6 @@ class DatabaseService {
   static Future<void> deleteChannel(String id) async {
     final db = await database;
     await db.delete('social_channels', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // ========== 联系人-社交途径关联操作 ==========
-
-  static Future<List<ContactChannelLink>> getContactChannelLinks(String contactId) async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'contact_channel_links',
-      where: 'contact_id = ?',
-      whereArgs: [contactId],
-      orderBy: 'created_at ASC',
-    );
-    return maps.map((m) => ContactChannelLink(
-      id: m['id'] as String,
-      contactId: m['contact_id'] as String,
-      channelId: m['channel_id'] as String,
-      account: m['account'] as String,
-      remark: m['remark'] as String?,
-      createdAt: DateTime.parse(m['created_at'] as String),
-    )).toList();
-  }
-
-  static Future<void> saveContactChannelLink(ContactChannelLink link) async {
-    final db = await database;
-    await db.insert(
-      'contact_channel_links',
-      {
-        'id': link.id,
-        'contact_id': link.contactId,
-        'channel_id': link.channelId,
-        'account': link.account,
-        'remark': link.remark,
-        'created_at': link.createdAt.toIso8601String(),
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  static Future<void> deleteContactChannelLink(String id) async {
-    final db = await database;
-    await db.delete('contact_channel_links', where: 'id = ?', whereArgs: [id]);
   }
 
   // ========== 任务调度操作 ==========

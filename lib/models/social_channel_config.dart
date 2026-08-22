@@ -90,6 +90,7 @@ class InteractionModeConfig {
 class ContactChannelConfig {
   final String id;
   final String contactId;
+  final String channelId; // 关联 SocialChannel.id
   final SocialPlatform platform;
   final String? account;
   final String? remark;
@@ -102,6 +103,7 @@ class ContactChannelConfig {
   const ContactChannelConfig({
     required this.id,
     required this.contactId,
+    this.channelId = '',
     required this.platform,
     this.account,
     this.remark,
@@ -115,6 +117,7 @@ class ContactChannelConfig {
   ContactChannelConfig copyWith({
     String? id,
     String? contactId,
+    String? channelId,
     SocialPlatform? platform,
     String? account,
     String? remark,
@@ -126,6 +129,7 @@ class ContactChannelConfig {
   }) => ContactChannelConfig(
     id: id ?? this.id,
     contactId: contactId ?? this.contactId,
+    channelId: channelId ?? this.channelId,
     platform: platform ?? this.platform,
     account: account ?? this.account,
     remark: remark ?? this.remark,
@@ -139,6 +143,7 @@ class ContactChannelConfig {
   Map<String, dynamic> toJson() => {
     'id': id,
     'contactId': contactId,
+    'channelId': channelId,
     'platform': platform.index,
     'account': account,
     'remark': remark,
@@ -152,6 +157,7 @@ class ContactChannelConfig {
   factory ContactChannelConfig.fromJson(Map<String, dynamic> json) => ContactChannelConfig(
     id: json['id'] as String,
     contactId: json['contactId'] as String,
+    channelId: json['channelId'] as String? ?? '',
     platform: SocialPlatform.values[json['platform'] as int? ?? 0],
     account: json['account'] as String?,
     remark: json['remark'] as String?,
@@ -363,5 +369,42 @@ InteractionModeConfig getModeConfig(InteractionMode mode) {
   return kInteractionModeConfigs.firstWhere(
     (m) => m.mode == mode,
     orElse: () => kInteractionModeConfigs.last,
+  );
+}
+
+/// 自定义平台默认色（当 platform == custom 时使用，按 customColorIdx 轮换）
+const List<Color> kCustomPlatformColors = [
+  Color(0xFF6366F1), Color(0xFFEC4899), Color(0xFFF59E0B),
+  Color(0xFF10B981), Color(0xFF8B5CF6), Color(0xFF14B8A6),
+  Color(0xFFEF4444), Color(0xFF06B6D4),
+];
+
+/// 根据 platform + name 获取平台配置；对于 SocialPlatform.custom 生成一个动态的 PlatformConfig
+PlatformConfig resolvePlatformConfig(SocialPlatform platform, String channelName, String channelIcon) {
+  if (platform != SocialPlatform.custom) {
+    return getPlatformConfig(platform);
+  }
+  // 使用名称字符串哈希稳定选择颜色
+  final idx = channelName.hashCode.abs() % kCustomPlatformColors.length;
+  final color = kCustomPlatformColors[idx];
+  return PlatformConfig(
+    platform: SocialPlatform.custom,
+    name: channelName,
+    emoji: channelIcon,
+    color: color,
+    features: const [
+      ChannelFeatureConfig(
+        feature: ChannelFeature.privateChat,
+        name: '私聊',
+        emoji: '💬',
+        supportedModes: [InteractionMode.textMessage, InteractionMode.voiceMessage, InteractionMode.voiceCall, InteractionMode.videoCall],
+      ),
+      ChannelFeatureConfig(
+        feature: ChannelFeature.customFeature,
+        name: '自定义',
+        emoji: '✨',
+        supportedModes: [InteractionMode.textMessage, InteractionMode.voiceMessage, InteractionMode.emojiSticker],
+      ),
+    ],
   );
 }
