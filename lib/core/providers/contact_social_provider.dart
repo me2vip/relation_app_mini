@@ -547,8 +547,8 @@ ${_stageFocus(stage, target, direction, contact.name)}
     if (contact.goalRelation != null && contact.goalRelation!.isNotEmpty) {
       buf.writeln('目标关系定位: ${contact.goalRelation}');
     }
-    if (contact.occupation != null && contact.occupation!.isNotEmpty) {
-      buf.writeln('职业: ${contact.occupation}');
+    if (contact.workExperience != null && contact.workExperience!.isNotEmpty) {
+      buf.writeln('职业经历: ${contact.workExperience}');
     }
     if (contact.tags.isNotEmpty) buf.writeln('标签: ${contact.tags.join('、')}');
     buf.writeln('');
