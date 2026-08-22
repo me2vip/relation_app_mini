@@ -14,7 +14,7 @@ import '../models/channel.dart';
 class DatabaseService {
   static Database? _database;
   static const String _dbName = 'relation_app_mini.db';
-  static const int _dbVersion = 6;
+  static const int _dbVersion = 7;
 
   static Future<Database> get database async {
     if (_database != null) return _database!;
@@ -140,7 +140,7 @@ class DatabaseService {
       )
     ''');
 
-    // 社交途径表
+    // 社交途径表（支持两级：parent_id 为空=父途径，非空=子途径）
     await db.execute('''
       CREATE TABLE social_channels (
         id TEXT PRIMARY KEY,
@@ -149,6 +149,7 @@ class DatabaseService {
         description TEXT,
         is_default INTEGER DEFAULT 0,
         platform_key TEXT DEFAULT 'custom',
+        parent_id TEXT,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       )
@@ -447,6 +448,12 @@ class DatabaseService {
     if (oldVersion < 6) {
       // 删除废弃的 contact_channel_links 表，关联关系统一走 ChannelConfigProvider（SharedPreferences）
       await db.execute('DROP TABLE IF EXISTS contact_channel_links');
+    }
+    if (oldVersion < 7) {
+      // social_channels 表新增 parent_id 列：空=父途径，非空=子途径（social_channels.id）
+      try {
+        await db.execute('ALTER TABLE social_channels ADD COLUMN parent_id TEXT');
+      } catch (_) {}
     }
   }
 
@@ -945,6 +952,29 @@ class DatabaseService {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'social_channels',
+      // 根途径按创建时间，同一父途径下的子途径紧接其后并按创建时间排序
+      orderBy: 'COALESCE(parent_id, id), CASE WHEN parent_id IS NULL THEN 0 ELSE 1 END, created_at ASC',
+    );
+    return maps.map((m) => SocialChannel(
+      id: m['id'] as String,
+      name: m['name'] as String,
+      icon: m['icon'] as String? ?? '📱',
+      description: m['description'] as String?,
+      isDefault: (m['is_default'] as int?) == 1,
+      platformKey: m['platform_key'] as String? ?? 'custom',
+      parentId: m['parent_id'] as String?,
+      createdAt: DateTime.parse(m['created_at'] as String),
+      updatedAt: DateTime.parse(m['updated_at'] as String),
+    )).toList();
+  }
+
+  /// 按父途径 id 获取全部子途径
+  static Future<List<SocialChannel>> getSubChannels(String parentId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'social_channels',
+      where: 'parent_id = ?',
+      whereArgs: [parentId],
       orderBy: 'created_at ASC',
     );
     return maps.map((m) => SocialChannel(
@@ -954,6 +984,7 @@ class DatabaseService {
       description: m['description'] as String?,
       isDefault: (m['is_default'] as int?) == 1,
       platformKey: m['platform_key'] as String? ?? 'custom',
+      parentId: m['parent_id'] as String?,
       createdAt: DateTime.parse(m['created_at'] as String),
       updatedAt: DateTime.parse(m['updated_at'] as String),
     )).toList();
@@ -970,6 +1001,7 @@ class DatabaseService {
         'description': channel.description,
         'is_default': channel.isDefault ? 1 : 0,
         'platform_key': channel.platformKey,
+        'parent_id': channel.parentId,
         'created_at': channel.createdAt.toIso8601String(),
         'updated_at': channel.updatedAt.toIso8601String(),
       },
@@ -977,8 +1009,11 @@ class DatabaseService {
     );
   }
 
+  /// 删除途径；删除父途径时级联删除全部子途径
   static Future<void> deleteChannel(String id) async {
     final db = await database;
+    // 级联删除子途径
+    await db.delete('social_channels', where: 'parent_id = ?', whereArgs: [id]);
     await db.delete('social_channels', where: 'id = ?', whereArgs: [id]);
   }
 

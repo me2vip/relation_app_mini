@@ -90,13 +90,17 @@ class InteractionModeConfig {
 class ContactChannelConfig {
   final String id;
   final String contactId;
-  final String channelId; // 关联 SocialChannel.id
+  final String channelId; // 关联 SocialChannel.id（父途径id）
   final SocialPlatform platform;
   final String? account;
   final String? remark;
   final List<ChannelFeature> enabledFeatures;
   final List<InteractionMode> preferredModes;
   final bool isPrimary;
+  /// 子途径 id：null/空=未指定精确子途径
+  final String? subChannelId;
+  /// 子途径名称快照（删除子途径后也能显示旧值，避免空白）
+  final String? subChannelName;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -110,6 +114,8 @@ class ContactChannelConfig {
     this.enabledFeatures = const [],
     this.preferredModes = const [],
     this.isPrimary = false,
+    this.subChannelId,
+    this.subChannelName,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -124,6 +130,10 @@ class ContactChannelConfig {
     List<ChannelFeature>? enabledFeatures,
     List<InteractionMode>? preferredModes,
     bool? isPrimary,
+    String? subChannelId,
+    bool resetSubChannelId = false,
+    String? subChannelName,
+    bool resetSubChannelName = false,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ContactChannelConfig(
@@ -136,6 +146,8 @@ class ContactChannelConfig {
     enabledFeatures: enabledFeatures ?? this.enabledFeatures,
     preferredModes: preferredModes ?? this.preferredModes,
     isPrimary: isPrimary ?? this.isPrimary,
+    subChannelId: resetSubChannelId ? null : (subChannelId ?? this.subChannelId),
+    subChannelName: resetSubChannelName ? null : (subChannelName ?? this.subChannelName),
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -150,6 +162,8 @@ class ContactChannelConfig {
     'enabledFeatures': enabledFeatures.map((f) => f.index).toList(),
     'preferredModes': preferredModes.map((m) => m.index).toList(),
     'isPrimary': isPrimary,
+    'subChannelId': subChannelId,
+    'subChannelName': subChannelName,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
@@ -168,6 +182,8 @@ class ContactChannelConfig {
         ?.map((m) => InteractionMode.values[m as int])
         .toList() ?? [],
     isPrimary: json['isPrimary'] as bool? ?? false,
+    subChannelId: json['subChannelId'] as String?,
+    subChannelName: json['subChannelName'] as String?,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
   );

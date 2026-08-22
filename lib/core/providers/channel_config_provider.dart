@@ -170,6 +170,19 @@ class ChannelConfigProvider extends ChangeNotifier {
     return contactCountByPlatform(platform, channelName: channelName);
   }
 
+  /// 统计指定 subChannelId 被多少个联系人使用（精确匹配）
+  int contactCountBySubChannelId(String? subChannelId) {
+    if (!_loaded) _loadAll();
+    if (subChannelId == null || subChannelId.isEmpty) return 0;
+    int cnt = 0;
+    for (final entry in _configs.entries) {
+      for (final c in entry.value) {
+        if (c.subChannelId == subChannelId) cnt++;
+      }
+    }
+    return cnt;
+  }
+
   Future<void> addConfig({
     required String contactId,
     String channelId = '',
@@ -179,6 +192,8 @@ class ChannelConfigProvider extends ChangeNotifier {
     List<ChannelFeature> enabledFeatures = const [],
     List<InteractionMode> preferredModes = const [],
     bool isPrimary = false,
+    String? subChannelId,
+    String? subChannelName,
   }) async {
     final now = DateTime.now();
     final config = ContactChannelConfig(
@@ -191,6 +206,8 @@ class ChannelConfigProvider extends ChangeNotifier {
       enabledFeatures: enabledFeatures,
       preferredModes: preferredModes,
       isPrimary: isPrimary,
+      subChannelId: subChannelId,
+      subChannelName: subChannelName,
       createdAt: now,
       updatedAt: now,
     );
@@ -210,6 +227,10 @@ class ChannelConfigProvider extends ChangeNotifier {
     List<ChannelFeature>? enabledFeatures,
     List<InteractionMode>? preferredModes,
     bool? isPrimary,
+    String? subChannelId,
+    bool resetSubChannelId = false,
+    String? subChannelName,
+    bool resetSubChannelName = false,
   }) async {
     final list = List<ContactChannelConfig>.from(_configs[contactId] ?? []);
     final index = list.indexWhere((c) => c.id == configId);
@@ -222,6 +243,10 @@ class ChannelConfigProvider extends ChangeNotifier {
       enabledFeatures: enabledFeatures,
       preferredModes: preferredModes,
       isPrimary: isPrimary,
+      subChannelId: subChannelId,
+      resetSubChannelId: resetSubChannelId,
+      subChannelName: subChannelName,
+      resetSubChannelName: resetSubChannelName,
       updatedAt: DateTime.now(),
     );
     list[index] = updated;

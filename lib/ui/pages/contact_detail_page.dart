@@ -675,6 +675,30 @@ class _InfoTab extends StatelessWidget {
                                             fontSize: 16,
                                           ),
                                         ),
+                                        if (config.subChannelName != null &&
+                                            config.subChannelName!.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                                    horizontal: 7,
+                                                    vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: platformConfig.color
+                                                  .withOpacity(0.1),
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: Text(
+                                              '· ${config.subChannelName}',
+                                              style: TextStyle(
+                                                color: platformConfig.color,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                         if (config.isPrimary) ...[
                                           const SizedBox(width: 8),
                                           Container(

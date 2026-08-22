@@ -748,6 +748,10 @@ class _ContactEditPageState extends State<ContactEditPage> {
                                               enabledFeatures: updated.enabledFeatures,
                                               preferredModes: updated.preferredModes,
                                               isPrimary: updated.isPrimary,
+                                              subChannelId: updated.subChannelId,
+                                              resetSubChannelId: updated.subChannelId == null,
+                                              subChannelName: updated.subChannelName,
+                                              resetSubChannelName: updated.subChannelName == null,
                                             );
                                           }
                                         });
@@ -1026,9 +1030,9 @@ class _ContactEditPageState extends State<ContactEditPage> {
   }
 
   void _addChannelConfig(ChannelConfigProvider channelProvider, int existingCount, Set<String> usedChannelIds) {
-    final allChannels = context.read<ChannelProvider>().channels;
-    // 过滤掉已使用过的渠道（避免同一联系人重复添加）
-    final availableChannels = allChannels.where((ch) => !usedChannelIds.contains(ch.id)).toList();
+    final cProv = context.read<ChannelProvider>();
+    // 只显示父途径作为一级选择；子途径在下方 chips 中单独选择
+    final availableChannels = cProv.parentChannels.where((ch) => !usedChannelIds.contains(ch.id)).toList();
     if (availableChannels.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('已添加所有可用途径，无需重复添加')),
@@ -1036,6 +1040,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
       return;
     }
     SocialChannel selectedChannel = availableChannels.first;
+    SocialChannel? selectedSub; // 选中的子途径，null=未指定
     SocialPlatform getPlatform() => selectedChannel.platform;
     PlatformConfig getPlatformCfg() => resolvePlatformConfig(
           getPlatform(), selectedChannel.name, selectedChannel.icon,
@@ -1092,6 +1097,7 @@ class _ContactEditPageState extends State<ContactEditPage> {
                           child: GestureDetector(
                             onTap: () => setDialogState(() {
                               selectedChannel = ch;
+                              selectedSub = null; // 切换父途径后清空子选择
                               enabledFeatures = [];
                               preferredModes = [];
                             }),
@@ -1124,6 +1130,24 @@ class _ContactEditPageState extends State<ContactEditPage> {
                       }).toList(),
                     ),
                   ),
+                  // 子途径选择（若当前父途径有子途径则展示，否则隐藏）
+                  if (cProv.subChannelsOf(selectedChannel.id).isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text('选择具体场景（可选）', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey)),
+                    const SizedBox(height: 8),
+                    _buildSubChips(
+                      subs: cProv.subChannelsOf(selectedChannel.id),
+                      accent: getPlatformCfg().color,
+                      selectedSub: selectedSub,
+                      onTap: (sub) => setDialogState(() {
+                        if (selectedSub?.id == sub?.id) {
+                          selectedSub = null; // 再次点击取消
+                        } else {
+                          selectedSub = sub;
+                        }
+                      }),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   TextField(controller: accountCtrl, decoration: _modernInputDecoration('账号/ID', '输入账号')),
                   const SizedBox(height: 12),
@@ -1185,6 +1209,8 @@ class _ContactEditPageState extends State<ContactEditPage> {
                               enabledFeatures: enabledFeatures,
                               preferredModes: preferredModes,
                               isPrimary: isPrimary,
+                              subChannelId: selectedSub?.id,
+                              subChannelName: selectedSub?.name,
                               createdAt: DateTime.now(),
                               updatedAt: DateTime.now(),
                             );
@@ -1198,6 +1224,8 @@ class _ContactEditPageState extends State<ContactEditPage> {
                                 enabledFeatures: enabledFeatures,
                                 preferredModes: preferredModes,
                                 isPrimary: isPrimary,
+                                subChannelId: selectedSub?.id,
+                                subChannelName: selectedSub?.name,
                               );
                             } else {
                               setState(() => _pendingChannelConfigs.add(config));
@@ -1285,6 +1313,78 @@ class _ContactEditPageState extends State<ContactEditPage> {
     );
   }
 
+  /// 子途径选择 chips：单选，再次点击取消
+  Widget _buildSubChips({
+    required List<SocialChannel> subs,
+    required Color accent,
+    required SocialChannel? selectedSub,
+    required void Function(SocialChannel?) onTap,
+  }) {
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        // 取消选项
+        GestureDetector(
+          onTap: () => onTap(null),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: selectedSub == null
+                  ? Colors.grey.shade200
+                  : Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: selectedSub == null ? Colors.grey : Colors.grey.shade200,
+                width: selectedSub == null ? 1.5 : 1,
+              ),
+            ),
+            child: Text(
+              '不指定',
+              style: TextStyle(
+                fontSize: 12.5,
+                color: selectedSub == null ? Colors.black87 : Colors.grey,
+                fontWeight: selectedSub == null ? FontWeight.w700 : FontWeight.normal,
+              ),
+            ),
+          ),
+        ),
+        ...subs.map((s) {
+          final selected = selectedSub?.id == s.id;
+          return GestureDetector(
+            onTap: () => onTap(s),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? accent.withOpacity(0.14) : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: selected ? accent : Colors.grey.shade200,
+                  width: selected ? 1.8 : 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(s.icon, style: const TextStyle(fontSize: 14)),
+                  const SizedBox(width: 4),
+                  Text(
+                    s.name,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: selected ? accent : Colors.black87,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   Widget _buildChannelConfigCard({
     required ContactChannelConfig config,
     required bool isPending,
@@ -1292,6 +1392,21 @@ class _ContactEditPageState extends State<ContactEditPage> {
     required void Function(ContactChannelConfig) onUpdate,
   }) {
     final platformConfig = getPlatformConfig(config.platform);
+    // 根据父 channelId 查找子途径列表（channelId 在之前的步骤中已写入父途径 id）
+    final cProv = context.read<ChannelProvider>();
+    final subs = cProv.subChannelsOf(config.channelId);
+    // 当前选中的子途径
+    final currentSubId = config.subChannelId;
+    SocialChannel? currentSub;
+    if (currentSubId != null && currentSubId.isNotEmpty) {
+      try {
+        currentSub = subs.firstWhere((s) => s.id == currentSubId);
+      } catch (_) {
+        currentSub = null;
+      }
+    }
+    final displaySubName = config.subChannelName ?? currentSub?.name;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
@@ -1330,6 +1445,23 @@ class _ContactEditPageState extends State<ContactEditPage> {
                         children: [
                           Text(platformConfig.name,
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                          // 显示当前已选子场景
+                          if (displaySubName != null && displaySubName.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: platformConfig.color.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text('· $displaySubName',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: platformConfig.color,
+                                  fontWeight: FontWeight.w600,
+                                )),
+                            ),
+                          ],
                           if (config.isPrimary) ...[
                             const SizedBox(width: 6),
                             Container(
@@ -1368,6 +1500,26 @@ class _ContactEditPageState extends State<ContactEditPage> {
                 ),
               ],
             ),
+            // 子途径选择 chips（父途径下有子场景且 channelId 非空时才展示）
+            if (subs.isNotEmpty && config.channelId.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              const Text('具体场景', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
+              const SizedBox(height: 6),
+              _buildSubChips(
+                subs: subs,
+                accent: platformConfig.color,
+                selectedSub: currentSub,
+                onTap: (sub) {
+                  final updated = config.copyWith(
+                    subChannelId: sub?.id,
+                    resetSubChannelId: sub == null,
+                    subChannelName: sub?.name,
+                    resetSubChannelName: sub == null,
+                  );
+                  onUpdate(updated);
+                },
+              ),
+            ],
             if (config.enabledFeatures.isNotEmpty) ...[
               const SizedBox(height: 10),
               const Text('启用功能', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey)),
