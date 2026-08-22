@@ -65,9 +65,11 @@ class ContactProvider extends ChangeNotifier {
   }
 
   Future<void> addContact(Contact contact) async {
+    _contacts.insert(0, contact);
+    if (_selectedContact == null) _selectedContact = contact;
+    notifyListeners();
     try {
       await DatabaseService.saveContact(contact);
-      // 记录初始关系层级（关系跟踪起点）
       final initial = RelationshipChange(
         id: _uuid.v4(),
         contactId: contact.id,
@@ -78,38 +80,54 @@ class ContactProvider extends ChangeNotifier {
         changedAt: DateTime.now(),
       );
       await DatabaseService.saveRelationshipChange(initial);
-      await loadContacts();
     } catch (e) {
+      _contacts.removeWhere((c) => c.id == contact.id);
+      if (_selectedContact?.id == contact.id) _selectedContact = null;
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> updateContact(Contact contact) async {
+    final idx = _contacts.indexWhere((c) => c.id == contact.id);
+    final original = idx >= 0 ? _contacts[idx] : null;
+    final updated = contact.copyWith(updatedAt: DateTime.now());
+    if (idx >= 0) {
+      _contacts[idx] = updated;
+      if (_selectedContact?.id == contact.id) _selectedContact = updated;
+      notifyListeners();
+    }
     try {
-      final updated = contact.copyWith(updatedAt: DateTime.now());
       await DatabaseService.saveContact(updated);
-      
-      // 更新联系方式
       for (final method in contact.methods) {
         await DatabaseService.saveContactMethod(method);
       }
-      
-      await loadContacts();
     } catch (e) {
+      if (original != null && idx >= 0) {
+        _contacts[idx] = original;
+        if (_selectedContact?.id == contact.id) _selectedContact = original;
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> deleteContact(String id) async {
+    final idx = _contacts.indexWhere((c) => c.id == id);
+    final removed = idx >= 0 ? _contacts.removeAt(idx) : null;
+    final wasSelected = _selectedContact?.id == id;
+    if (idx >= 0) {
+      if (wasSelected) _selectedContact = null;
+      notifyListeners();
+    }
     try {
       await DatabaseService.deleteContact(id);
-      if (_selectedContact?.id == id) {
-        _selectedContact = null;
-      }
-      await loadContacts();
     } catch (e) {
+      if (removed != null) {
+        _contacts.insert(idx, removed);
+        if (wasSelected) _selectedContact = removed;
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }

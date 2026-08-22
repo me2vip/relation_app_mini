@@ -1,15 +1,56 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../models/social_channel_config.dart';
 
 class ChannelConfigProvider extends ChangeNotifier {
   final _uuid = const Uuid();
+  static const String _configsKey = 'channel_config_';
 
   final Map<String, List<ContactChannelConfig>> _configs = {};
   final Map<String, List<ContactChannelConfig>> _deletedConfigs = {};
+  bool _loaded = false;
 
   List<ContactChannelConfig> getConfigsForContact(String contactId) {
+    if (!_loaded) _loadAll();
     return List.unmodifiable(_configs[contactId] ?? []);
+  }
+
+  Future<void> _loadAll() async {
+    if (_loaded) return;
+    _loaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys();
+      for (final key in keys) {
+        if (key.startsWith(_configsKey)) {
+          final contactId = key.substring(_configsKey.length);
+          final jsonList = prefs.getStringList(key);
+          if (jsonList != null) {
+            _configs[contactId] = jsonList
+                .map((j) => ContactChannelConfig.fromJson(
+                      Map<String, dynamic>.from(j as Map),
+                    ))
+                .toList();
+          }
+        }
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _persist(String contactId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = _configs[contactId] ?? [];
+    await prefs.setStringList(
+      '$_configsKey$contactId',
+      list.map((c) => c.toJson().toString()).toList(),
+    );
+  }
+
+  Future<void> _clearPersisted(String contactId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('$_configsKey$contactId');
   }
 
   ContactChannelConfig? getConfig(String contactId, String configId) {
@@ -47,6 +88,7 @@ class ChannelConfigProvider extends ChangeNotifier {
     list.add(config);
     _configs[contactId] = list;
     notifyListeners();
+    _persist(contactId);
   }
 
   Future<void> updateConfig({
@@ -73,15 +115,19 @@ class ChannelConfigProvider extends ChangeNotifier {
     list[index] = updated;
     _configs[contactId] = list;
     notifyListeners();
+    _persist(contactId);
   }
 
   Future<void> removeConfig(String contactId, String configId) async {
     final list = List<ContactChannelConfig>.from(_configs[contactId] ?? []);
-    final config = list.where((c) => c.id == configId).first;
+    final i = list.indexWhere((c) => c.id == configId);
+    if (i < 0) return;
+    final config = list[i];
     _deletedConfigs.putIfAbsent(contactId, () => []).add(config);
-    list.removeWhere((c) => c.id == configId);
+    list.removeAt(i);
     _configs[contactId] = list;
     notifyListeners();
+    _persist(contactId);
   }
 
   Future<void> setEnabledFeatures({
@@ -136,5 +182,6 @@ class ChannelConfigProvider extends ChangeNotifier {
 
   void clearCacheForContact(String contactId) {
     _configs.remove(contactId);
+    _clearPersisted(contactId);
   }
 }

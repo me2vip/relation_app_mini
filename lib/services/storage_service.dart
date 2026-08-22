@@ -883,6 +883,24 @@ class DatabaseService {
     );
   }
 
+  static Future<void> deleteTask(String id) async {
+    final db = await database;
+    await db.delete(
+      'tasks',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  static Future<void> deleteTaskSchedule(String id) async {
+    final db = await database;
+    await db.delete(
+      'task_schedules',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
   // ========== AI模型操作 ==========
   
   static Future<List<AIModel>> getAllAIModels() async {
@@ -927,6 +945,15 @@ class DatabaseService {
         'is_default': model.isDefault ? 1 : 0,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  static Future<void> deleteAIModel(String id) async {
+    final db = await database;
+    await db.delete(
+      'ai_models',
+      where: 'id = ?',
+      whereArgs: [id],
     );
   }
 

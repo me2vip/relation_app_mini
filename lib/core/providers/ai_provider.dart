@@ -103,43 +103,98 @@ class AIProvider extends ChangeNotifier {
   }
 
   Future<void> addModel(AIModel model) async {
+    _models.add(model);
+    if (model.isDefault) {
+      for (int i = 0; i < _models.length; i++) {
+        if (_models[i].id != model.id) {
+          _models[i] = _models[i].copyWith(isDefault: false);
+        }
+      }
+      _currentModel = model;
+    }
+    notifyListeners();
     try {
-      await DatabaseService.saveAIModel(model);
-      await loadModels();
+      if (model.isDefault) {
+        for (final m in _models) {
+          await DatabaseService.saveAIModel(m);
+        }
+      } else {
+        await DatabaseService.saveAIModel(model);
+      }
     } catch (e) {
+      _models.removeWhere((m) => m.id == model.id);
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> updateModel(AIModel model) async {
+    final idx = _models.indexWhere((m) => m.id == model.id);
+    final original = idx >= 0 ? _models[idx] : null;
+    if (idx >= 0) {
+      _models[idx] = model;
+      if (model.isDefault) {
+        for (int i = 0; i < _models.length; i++) {
+          if (i != idx) {
+            _models[i] = _models[i].copyWith(isDefault: false);
+          }
+        }
+        _currentModel = model;
+      } else if (_currentModel?.id == model.id && !model.isDefault) {
+        _currentModel = null;
+      }
+      notifyListeners();
+    }
     try {
-      await DatabaseService.saveAIModel(model);
-      await loadModels();
+      for (final m in _models) {
+        await DatabaseService.saveAIModel(m);
+      }
     } catch (e) {
+      if (original != null && idx >= 0) {
+        _models[idx] = original;
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> deleteModel(String modelId) async {
-    try {
-      _models.removeWhere((m) => m.id == modelId);
+    final idx = _models.indexWhere((m) => m.id == modelId);
+    final removed = idx >= 0 ? _models.removeAt(idx) : null;
+    final wasCurrent = _currentModel?.id == modelId;
+    if (idx >= 0) {
+      if (wasCurrent) _currentModel = null;
       notifyListeners();
+    }
+    try {
+      await DatabaseService.deleteAIModel(modelId);
     } catch (e) {
+      if (removed != null) {
+        _models.insert(idx, removed);
+        if (wasCurrent) _currentModel = removed;
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> setDefaultModel(String modelId) async {
+    final originals = List<AIModel>.from(_models);
+    final beforeCurrent = _currentModel;
+    for (int i = 0; i < _models.length; i++) {
+      final isDefault = _models[i].id == modelId;
+      _models[i] = _models[i].copyWith(isDefault: isDefault);
+      if (isDefault) _currentModel = _models[i];
+    }
+    notifyListeners();
     try {
-      for (final model in _models) {
-        final updated = model.copyWith(isDefault: model.id == modelId);
-        await DatabaseService.saveAIModel(updated);
+      for (final m in _models) {
+        await DatabaseService.saveAIModel(m);
       }
-      await loadModels();
     } catch (e) {
+      _models = originals;
+      _currentModel = beforeCurrent;
       _errorMessage = e.toString();
       notifyListeners();
     }

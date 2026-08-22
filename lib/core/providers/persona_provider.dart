@@ -91,11 +91,13 @@ class PersonaProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
     );
+    _groups.add(group);
+    notifyListeners();
     try {
       await DatabaseService.saveContactGroup(group);
-      await loadAll();
       return group;
     } catch (e) {
+      _groups.removeWhere((g) => g.id == group.id);
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -103,21 +105,33 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updateGroup(ContactGroup group) async {
+    final idx = _groups.indexWhere((g) => g.id == group.id);
+    final original = idx >= 0 ? _groups[idx] : null;
+    final updated = group.copyWith(updatedAt: DateTime.now());
+    if (idx >= 0) {
+      _groups[idx] = updated;
+      notifyListeners();
+    }
     try {
-      final updated = group.copyWith(updatedAt: DateTime.now());
       await DatabaseService.saveContactGroup(updated);
-      await loadAll();
     } catch (e) {
+      if (original != null && idx >= 0) _groups[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> deleteGroup(String groupId) async {
+    final idx = _groups.indexWhere((g) => g.id == groupId);
+    final removed = idx >= 0 ? _groups.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await DatabaseService.deleteContactGroup(groupId);
-      await loadAll();
     } catch (e) {
+      if (removed != null) {
+        _groups.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -170,11 +184,13 @@ class PersonaProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
     );
+    _personas.add(persona);
+    notifyListeners();
     try {
       await DatabaseService.savePersona(persona);
-      await loadAll();
       return persona;
     } catch (e) {
+      _personas.removeWhere((p) => p.id == persona.id);
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -182,21 +198,33 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updatePersona(Persona persona) async {
+    final idx = _personas.indexWhere((p) => p.id == persona.id);
+    final original = idx >= 0 ? _personas[idx] : null;
+    final updated = persona.copyWith(updatedAt: DateTime.now());
+    if (idx >= 0) {
+      _personas[idx] = updated;
+      notifyListeners();
+    }
     try {
-      final updated = persona.copyWith(updatedAt: DateTime.now());
       await DatabaseService.savePersona(updated);
-      await loadAll();
     } catch (e) {
+      if (original != null && idx >= 0) _personas[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> deletePersona(String personaId) async {
+    final idx = _personas.indexWhere((p) => p.id == personaId);
+    final removed = idx >= 0 ? _personas.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await DatabaseService.deletePersona(personaId);
-      await loadAll();
     } catch (e) {
+      if (removed != null) {
+        _personas.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -215,19 +243,38 @@ class PersonaProvider extends ChangeNotifier {
 
   /// 为人设添加/更新信息项
   Future<PersonaInfoItem> saveInfoItem(PersonaInfoItem item) async {
+    final now = DateTime.now();
+    final isNew = item.id.isEmpty;
+    final saved = isNew
+        ? item.copyWith(id: _uuid.v4(), createdAt: now, updatedAt: now)
+        : item.copyWith(updatedAt: now);
+    // 乐观更新：在_personas中同步更新persona.infoItems
+    final pIdx = _personas.indexWhere((p) => p.id == saved.personaId);
+    Persona? originalPersona;
+    if (pIdx >= 0) {
+      originalPersona = _personas[pIdx];
+      final items = List<PersonaInfoItem>.from(originalPersona.infoItems);
+      if (isNew) {
+        items.add(saved);
+      } else {
+        final iIdx = items.indexWhere((i) => i.id == saved.id);
+        if (iIdx >= 0) {
+          items[iIdx] = saved;
+        } else {
+          items.add(saved);
+        }
+      }
+      _personas[pIdx] = originalPersona.copyWith(infoItems: items);
+      notifyListeners();
+    }
     try {
-      final now = DateTime.now();
-      final saved = item.id.isEmpty
-          ? item.copyWith(
-              id: _uuid.v4(),
-              createdAt: now,
-              updatedAt: now,
-            )
-          : item.copyWith(updatedAt: now);
       await DatabaseService.savePersonaInfoItem(saved);
-      await loadAll();
       return saved;
     } catch (e) {
+      if (originalPersona != null && pIdx >= 0) {
+        _personas[pIdx] = originalPersona;
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -236,10 +283,28 @@ class PersonaProvider extends ChangeNotifier {
 
   /// 删除人设信息项
   Future<void> deleteInfoItem(String itemId) async {
+    Persona? originalPersona;
+    int pIdx = -1;
+    for (int i = 0; i < _personas.length; i++) {
+      final p = _personas[i];
+      if (p.infoItems.any((it) => it.id == itemId)) {
+        originalPersona = p;
+        pIdx = i;
+        break;
+      }
+    }
+    if (originalPersona != null && pIdx >= 0) {
+      final items = originalPersona.infoItems.where((it) => it.id != itemId).toList();
+      _personas[pIdx] = originalPersona.copyWith(infoItems: items);
+      notifyListeners();
+    }
     try {
       await DatabaseService.deletePersonaInfoItem(itemId);
-      await loadAll();
     } catch (e) {
+      if (originalPersona != null && pIdx >= 0) {
+        _personas[pIdx] = originalPersona;
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -309,11 +374,13 @@ class PersonaProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
     );
+    _dynamicPosts.insert(0, post);
+    notifyListeners();
     try {
       await DatabaseService.saveDynamicPost(post);
-      await loadAll();
       return post;
     } catch (e) {
+      _dynamicPosts.removeWhere((p) => p.id == post.id);
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -321,21 +388,33 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> updateDynamicPost(DynamicPost post) async {
+    final idx = _dynamicPosts.indexWhere((p) => p.id == post.id);
+    final original = idx >= 0 ? _dynamicPosts[idx] : null;
+    final updated = post.copyWith(updatedAt: DateTime.now());
+    if (idx >= 0) {
+      _dynamicPosts[idx] = updated;
+      notifyListeners();
+    }
     try {
-      final updated = post.copyWith(updatedAt: DateTime.now());
       await DatabaseService.saveDynamicPost(updated);
-      await loadAll();
     } catch (e) {
+      if (original != null && idx >= 0) _dynamicPosts[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> deleteDynamicPost(String postId) async {
+    final idx = _dynamicPosts.indexWhere((p) => p.id == postId);
+    final removed = idx >= 0 ? _dynamicPosts.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await DatabaseService.deleteDynamicPost(postId);
-      await loadAll();
     } catch (e) {
+      if (removed != null) {
+        _dynamicPosts.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -357,11 +436,13 @@ class PersonaProvider extends ChangeNotifier {
       textContent: textContent,
       createdAt: DateTime.now(),
     );
+    _tempMaterials.insert(0, material);
+    notifyListeners();
     try {
       await DatabaseService.saveTempMaterial(material);
-      await loadAll();
       return material;
     } catch (e) {
+      _tempMaterials.removeWhere((m) => m.id == material.id);
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -369,10 +450,16 @@ class PersonaProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTempMaterial(String materialId) async {
+    final idx = _tempMaterials.indexWhere((m) => m.id == materialId);
+    final removed = idx >= 0 ? _tempMaterials.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await DatabaseService.deleteTempMaterial(materialId);
-      await loadAll();
     } catch (e) {
+      if (removed != null) {
+        _tempMaterials.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -380,10 +467,16 @@ class PersonaProvider extends ChangeNotifier {
 
   /// 更新临时素材（用于用户编辑文案后写回）
   Future<void> updateTempMaterial(TempMaterial material) async {
+    final idx = _tempMaterials.indexWhere((m) => m.id == material.id);
+    final original = idx >= 0 ? _tempMaterials[idx] : null;
+    if (idx >= 0) {
+      _tempMaterials[idx] = material;
+      notifyListeners();
+    }
     try {
       await DatabaseService.saveTempMaterial(material);
-      await loadAll();
     } catch (e) {
+      if (original != null && idx >= 0) _tempMaterials[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -462,8 +555,21 @@ class PersonaProvider extends ChangeNotifier {
         aiCaption: captions.values.firstOrNull,
         status: TempMaterialStatus.captioned,
       );
-      await DatabaseService.saveTempMaterial(updated);
-      await loadAll();
+      final mIdx = _tempMaterials.indexWhere((m) => m.id == material.id);
+      final originalMaterial = mIdx >= 0 ? _tempMaterials[mIdx] : null;
+      if (mIdx >= 0) {
+        _tempMaterials[mIdx] = updated;
+        notifyListeners();
+      }
+      try {
+        await DatabaseService.saveTempMaterial(updated);
+      } catch (e) {
+        if (originalMaterial != null && mIdx >= 0) {
+          _tempMaterials[mIdx] = originalMaterial;
+          notifyListeners();
+        }
+        rethrow;
+      }
     } catch (e) {
       _errorMessage = e.toString();
     } finally {
@@ -578,11 +684,24 @@ class PersonaProvider extends ChangeNotifier {
         tasks.add(task);
       }
 
-      // 3. 更新素材状态
+      // 3. 更新素材状态 + 内存添加新posts
       final updated = material.copyWith(status: TempMaterialStatus.taskCreated);
-      await DatabaseService.saveTempMaterial(updated);
-      await loadAll();
-      return (posts, tasks);
+      final mIdx = _tempMaterials.indexWhere((m) => m.id == material.id);
+      final originalMaterial = mIdx >= 0 ? _tempMaterials[mIdx] : null;
+      for (final p in posts) {
+        _dynamicPosts.insert(0, p);
+      }
+      if (mIdx >= 0) _tempMaterials[mIdx] = updated;
+      notifyListeners();
+      try {
+        await DatabaseService.saveTempMaterial(updated);
+        return (posts, tasks);
+      } catch (e) {
+        _dynamicPosts.removeWhere((p) => posts.any((np) => np.id == p.id));
+        if (originalMaterial != null && mIdx >= 0) _tempMaterials[mIdx] = originalMaterial;
+        notifyListeners();
+        rethrow;
+      }
     } catch (e) {
       _errorMessage = e.toString();
       notifyListeners();

@@ -82,12 +82,13 @@ class ChannelProvider extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
     );
+    _channels.add(channel);
+    notifyListeners();
     try {
       await DatabaseService.saveChannel(channel);
-      _channels = await DatabaseService.getAllChannels();
-      notifyListeners();
       return channel;
     } catch (e) {
+      _channels.removeWhere((c) => c.id == channel.id);
       _errorMessage = e.toString();
       notifyListeners();
       rethrow;
@@ -96,13 +97,17 @@ class ChannelProvider extends ChangeNotifier {
 
   /// 更新途径（改名/换图标）
   Future<void> updateChannel(SocialChannel channel) async {
-    try {
-      await DatabaseService.saveChannel(
-        channel.copyWith(updatedAt: DateTime.now()),
-      );
-      _channels = await DatabaseService.getAllChannels();
+    final idx = _channels.indexWhere((c) => c.id == channel.id);
+    final original = idx >= 0 ? _channels[idx] : null;
+    final updated = channel.copyWith(updatedAt: DateTime.now());
+    if (idx >= 0) {
+      _channels[idx] = updated;
       notifyListeners();
+    }
+    try {
+      await DatabaseService.saveChannel(updated);
     } catch (e) {
+      if (original != null && idx >= 0) _channels[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -110,11 +115,16 @@ class ChannelProvider extends ChangeNotifier {
 
   /// 删除途径（同时删除关联）
   Future<void> deleteChannel(String channelId) async {
+    final idx = _channels.indexWhere((c) => c.id == channelId);
+    final removed = idx >= 0 ? _channels.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await DatabaseService.deleteChannel(channelId);
-      _channels = await DatabaseService.getAllChannels();
-      notifyListeners();
     } catch (e) {
+      if (removed != null) {
+        _channels.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -147,21 +157,33 @@ class ChannelProvider extends ChangeNotifier {
     String? remark,
   }) async {
     final now = DateTime.now();
-    final existing = getLinksByContact(contactId)
-        .where((l) => l.channelId == channelId)
-        .toList();
+    final current = List<ContactChannelLink>.from(_contactLinks[contactId] ?? []);
+    final existingIdx = current.indexWhere((l) => l.channelId == channelId);
+    final original = existingIdx >= 0 ? current[existingIdx] : null;
     final link = ContactChannelLink(
-      id: existing.isNotEmpty ? existing.first.id : _uuid.v4(),
+      id: original?.id ?? _uuid.v4(),
       contactId: contactId,
       channelId: channelId,
       account: account,
       remark: remark,
-      createdAt: existing.isNotEmpty ? existing.first.createdAt : now,
+      createdAt: original?.createdAt ?? now,
     );
+    if (existingIdx >= 0) {
+      current[existingIdx] = link;
+    } else {
+      current.add(link);
+    }
+    _contactLinks[contactId] = current;
+    notifyListeners();
     try {
       await DatabaseService.saveContactChannelLink(link);
-      await loadContactLinks(contactId);
     } catch (e) {
+      if (original != null && existingIdx >= 0) {
+        current[existingIdx] = original;
+      } else {
+        current.removeWhere((l) => l.id == link.id);
+      }
+      _contactLinks[contactId] = current;
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -169,10 +191,21 @@ class ChannelProvider extends ChangeNotifier {
 
   /// 删除联系人与途径的关联
   Future<void> removeContactLink(String linkId, String contactId) async {
+    final current = List<ContactChannelLink>.from(_contactLinks[contactId] ?? []);
+    final idx = current.indexWhere((l) => l.id == linkId);
+    final removed = idx >= 0 ? current.removeAt(idx) : null;
+    if (idx >= 0) {
+      _contactLinks[contactId] = current;
+      notifyListeners();
+    }
     try {
       await DatabaseService.deleteContactChannelLink(linkId);
-      await loadContactLinks(contactId);
     } catch (e) {
+      if (removed != null) {
+        current.insert(idx, removed);
+        _contactLinks[contactId] = current;
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }

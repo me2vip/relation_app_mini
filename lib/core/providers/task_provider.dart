@@ -65,48 +65,59 @@ class TaskProvider extends ChangeNotifier {
   }
 
   Future<void> addTask(SocialTask task) async {
+    _tasks.insert(0, task);
+    notifyListeners();
     try {
       await DatabaseService.saveTask(task);
-      
-      // 预约通知
       if (task.scheduledAt.isAfter(DateTime.now())) {
         await NotificationService.scheduleTaskReminder(task);
       }
-      
-      await loadTasks();
     } catch (e) {
+      _tasks.removeWhere((t) => t.id == task.id);
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> updateTask(SocialTask task) async {
+    final idx = _tasks.indexWhere((t) => t.id == task.id);
+    final original = idx >= 0 ? _tasks[idx] : null;
+    if (idx >= 0) {
+      _tasks[idx] = task;
+      notifyListeners();
+    }
     try {
       await DatabaseService.saveTask(task);
-      
-      // 重新预约通知
       await NotificationService.cancelNotification(task.id.hashCode);
-      if (task.status == TaskStatus.pending && 
+      if (task.status == TaskStatus.pending &&
           task.scheduledAt.isAfter(DateTime.now())) {
         await NotificationService.scheduleTaskReminder(task);
       }
-      
-      await loadTasks();
     } catch (e) {
+      if (original != null && idx >= 0) _tasks[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
   }
 
   Future<void> updateTaskStatus(String taskId, TaskStatus status) async {
+    final idx = _tasks.indexWhere((t) => t.id == taskId);
+    SocialTask? original;
+    if (idx >= 0) {
+      original = _tasks[idx];
+      _tasks[idx] = original.copyWith(
+        status: status,
+        completedAt: status == TaskStatus.completed ? DateTime.now() : null,
+      );
+      notifyListeners();
+    }
     try {
       await DatabaseService.updateTaskStatus(taskId, status);
-      
-      // 取消通知
-      await NotificationService.cancelNotification(taskId.hashCode);
-      
-      await loadTasks();
+      if (status != TaskStatus.pending) {
+        await NotificationService.cancelNotification(taskId.hashCode);
+      }
     } catch (e) {
+      if (original != null && idx >= 0) _tasks[idx] = original;
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -121,11 +132,17 @@ class TaskProvider extends ChangeNotifier {
   }
 
   Future<void> deleteTask(String taskId) async {
+    final idx = _tasks.indexWhere((t) => t.id == taskId);
+    final removed = idx >= 0 ? _tasks.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
       await NotificationService.cancelNotification(taskId.hashCode);
-      _tasks.removeWhere((t) => t.id == taskId);
-      notifyListeners();
+      await DatabaseService.deleteTask(taskId);
     } catch (e) {
+      if (removed != null) {
+        _tasks.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
@@ -181,10 +198,16 @@ class TaskProvider extends ChangeNotifier {
 
   // 删除任务调度
   Future<void> deleteSchedule(String scheduleId) async {
+    final idx = _schedules.indexWhere((s) => s.id == scheduleId);
+    final removed = idx >= 0 ? _schedules.removeAt(idx) : null;
+    if (idx >= 0) notifyListeners();
     try {
-      _schedules.removeWhere((s) => s.id == scheduleId);
-      notifyListeners();
+      await DatabaseService.deleteTaskSchedule(scheduleId);
     } catch (e) {
+      if (removed != null) {
+        _schedules.insert(idx, removed);
+        notifyListeners();
+      }
       _errorMessage = e.toString();
       notifyListeners();
     }
