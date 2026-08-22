@@ -71,10 +71,10 @@ class _ContactDetailPageState extends State<ContactDetailPage>
                   child: TabBarView(
                     controller: _tabController,
                     children: [
-                      _InfoTab(contact: contact),
-                      _InteractionTab(contact: contact),
-                      _TaskTab(contact: contact),
-                      _RelationshipTab(contact: contact),
+                      _InfoTab(contact: contact, levelColor: levelColor, lightColor: _getLightenColor(levelColor)),
+                      _InteractionTab(contact: contact, levelColor: levelColor, lightColor: _getLightenColor(levelColor)),
+                      _TaskTab(contact: contact, levelColor: levelColor, lightColor: _getLightenColor(levelColor)),
+                      _RelationshipTab(contact: contact, levelColor: levelColor, lightColor: _getLightenColor(levelColor)),
                     ],
                   ),
                 ),
@@ -417,10 +417,46 @@ class _ContactDetailPageState extends State<ContactDetailPage>
   }
 }
 
+/// 公共的章节标题组件，统一各Tab的标题样式
+Widget _buildSectionTitle(
+  String title,
+  IconData icon,
+  Color levelColor,
+  Color lightColor,
+) =>
+    Padding(
+      padding: const EdgeInsets.only(bottom: 10, left: 4),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [levelColor, lightColor],
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: Colors.white, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+
 class _InfoTab extends StatelessWidget {
   final Contact contact;
+  final Color levelColor;
+  final Color lightColor;
 
-  const _InfoTab({required this.contact});
+  const _InfoTab({required this.contact, required this.levelColor, required this.lightColor});
 
   @override
   Widget build(BuildContext context) {
@@ -783,8 +819,8 @@ class _InfoTab extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                  gradient: LinearGradient(
+                    colors: [levelColor, lightColor],
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
@@ -813,32 +849,8 @@ class _InfoTab extends StatelessWidget {
     );
   }
 
-  Widget _sectionTitle(String title, IconData icon) => Padding(
-        padding: const EdgeInsets.only(bottom: 10, left: 4),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
-                ),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      );
+  Widget _sectionTitle(String title, IconData icon) =>
+      _buildSectionTitle(title, icon, levelColor, lightColor);
 
   Widget _infoCard(List<Widget> children) => Container(
         decoration: BoxDecoration(
@@ -870,12 +882,12 @@ class _InfoTab extends StatelessWidget {
             decoration: BoxDecoration(
               color: highlight
                   ? Colors.red.withOpacity(0.1)
-                  : const Color(0xFFFF6B6B).withOpacity(0.08),
+                  : levelColor.withOpacity(0.08),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon,
                 size: 16,
-                color: highlight ? Colors.red : const Color(0xFFFF6B6B)),
+                color: highlight ? Colors.red : levelColor),
           ),
           const SizedBox(width: 12),
           SizedBox(
@@ -901,8 +913,10 @@ class _InfoTab extends StatelessWidget {
 
 class _InteractionTab extends StatelessWidget {
   final Contact contact;
+  final Color levelColor;
+  final Color lightColor;
 
-  const _InteractionTab({required this.contact});
+  const _InteractionTab({required this.contact, required this.levelColor, required this.lightColor});
 
   @override
   Widget build(BuildContext context) {
@@ -1054,8 +1068,10 @@ class _InteractionTab extends StatelessWidget {
 
 class _TaskTab extends StatelessWidget {
   final Contact contact;
+  final Color levelColor;
+  final Color lightColor;
 
-  const _TaskTab({required this.contact});
+  const _TaskTab({required this.contact, required this.levelColor, required this.lightColor});
 
   @override
   Widget build(BuildContext context) {
@@ -1085,13 +1101,13 @@ class _TaskTab extends StatelessWidget {
                   const SizedBox(height: 20),
                   Container(
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                      gradient: LinearGradient(
+                        colors: [levelColor, lightColor],
                       ),
                       borderRadius: BorderRadius.circular(25),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFFF6B6B).withOpacity(0.4),
+                          color: levelColor.withOpacity(0.4),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -1111,7 +1127,7 @@ class _TaskTab extends StatelessWidget {
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFFFF6B6B),
+                      foregroundColor: levelColor,
                     ),
                     onPressed: () =>
                         Navigator.pushNamed(context, '/ai-task-center'),
@@ -1141,13 +1157,13 @@ class _TaskTab extends StatelessWidget {
             Center(
               child: Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                  gradient: LinearGradient(
+                    colors: [levelColor, lightColor],
                   ),
                   borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFFF6B6B).withOpacity(0.4),
+                      color: levelColor.withOpacity(0.4),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -1187,7 +1203,7 @@ class _TaskTab extends StatelessWidget {
                   gradient: LinearGradient(
                     colors: isCompleted
                         ? const [Color(0xFF4CAF50), Color(0xFF81C784)]
-                        : const [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                        : [levelColor, lightColor],
                   ),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -1218,7 +1234,7 @@ class _TaskTab extends StatelessWidget {
     final iconData = _getTaskIcon(task.type);
     final accentColor = isCompleted
         ? const Color(0xFF4CAF50)
-        : const Color(0xFFFF6B6B);
+        : levelColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -1277,8 +1293,8 @@ class _TaskTab extends StatelessWidget {
             if (!isCompleted)
               Container(
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                  gradient: LinearGradient(
+                    colors: [levelColor, lightColor],
                   ),
                   shape: BoxShape.circle,
                 ),
@@ -1465,24 +1481,9 @@ IconData _getModelIcon(AIModelProvider provider) {
 
 class _RelationshipTab extends StatelessWidget {
   final Contact contact;
-  const _RelationshipTab({required this.contact});
-
-  Color _levelColor(ContactLevel level) {
-    switch (level) {
-      case ContactLevel.unimportant:
-        return const Color(0xFF9E9E9E);
-      case ContactLevel.normal:
-        return const Color(0xFF2196F3);
-      case ContactLevel.important:
-        return const Color(0xFFFF9800);
-      case ContactLevel.core:
-        return const Color(0xFFE53935);
-    }
-  }
-
-  Color _lightenColor(Color color) {
-    return Color.lerp(color, Colors.white, 0.35) ?? color;
-  }
+  final Color levelColor;
+  final Color lightColor;
+  const _RelationshipTab({required this.contact, required this.levelColor, required this.lightColor});
 
   String _levelName(ContactLevel level) {
     switch (level) {
@@ -1506,7 +1507,6 @@ class _RelationshipTab extends StatelessWidget {
           builder: (context, snapshot) {
             final changes = snapshot.data ?? [];
             final progress = contact.level.index / ContactLevel.core.index;
-            final levelColor = _levelColor(contact.level);
 
             return ListView(
               padding:
@@ -1515,7 +1515,7 @@ class _RelationshipTab extends StatelessWidget {
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [levelColor, _lightenColor(levelColor)],
+                      colors: [levelColor, lightColor],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -1625,13 +1625,13 @@ class _RelationshipTab extends StatelessWidget {
                     Expanded(
                       child: Container(
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
+                          gradient: LinearGradient(
+                            colors: [levelColor, lightColor],
                           ),
                           borderRadius: BorderRadius.circular(14),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFFF6B6B).withOpacity(0.4),
+                              color: levelColor.withOpacity(0.4),
                               blurRadius: 8,
                               offset: const Offset(0, 4),
                             ),
@@ -1676,57 +1676,25 @@ class _RelationshipTab extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 24),
-                Padding(
-                  padding: const EdgeInsets.only(left: 4),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFFFF6B6B), Color(0xFFFFA07A)],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.timeline,
-                            color: Colors.white, size: 16),
-                      ),
-                      const SizedBox(width: 10),
-                      const Text(
-                        '关系演进时间线',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: Colors.black87),
-                      ),
-                    ],
-                  ),
-                ),
+                _buildSectionTitle('关系演进时间线', Icons.timeline, levelColor, lightColor),
                 const SizedBox(height: 16),
                 if (changes.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(30),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: const Column(
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.timeline,
-                            size: 48, color: Colors.grey),
-                        SizedBox(height: 12),
-                        Text(
-                          '暂无关系变更记录',
-                          style:
-                              TextStyle(color: Colors.grey, fontSize: 13),
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.timeline,
+                              size: 60, color: Colors.grey),
                         ),
+                        const SizedBox(height: 20),
+                        const Text('暂无关系变更记录',
+                            style: TextStyle(color: Colors.grey, fontSize: 14)),
                       ],
                     ),
                   )
@@ -1792,7 +1760,7 @@ class _RelationshipTab extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
@@ -1897,7 +1865,7 @@ class _RelationshipTab extends StatelessWidget {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF6B6B),
+                backgroundColor: levelColor,
                 foregroundColor: Colors.white,
               ),
               onPressed: () {
