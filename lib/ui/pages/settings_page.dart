@@ -74,13 +74,13 @@ class _SettingsPageState extends State<SettingsPage> {
               _SettingsTile(
                 icon: Icons.auto_awesome,
                 title: 'AI任务中心',
-                subtitle: '统一的AI任务生成入口，支持外部AI流程',
+                subtitle: '统一的AI任务生成入口，支持内部AI和外部AI',
                 onTap: () => Navigator.pushNamed(context, '/ai-task-center'),
               ),
               _SettingsTile(
                 icon: Icons.smart_toy_outlined,
-                title: 'AI模型配置',
-                subtitle: '管理AI模型和API密钥',
+                title: 'AI模型管理',
+                subtitle: '管理内部AI模型、API密钥和调用配置',
                 onTap: () => Navigator.pushNamed(context, '/ai-models'),
               ),
               _SettingsTile(
@@ -88,12 +88,6 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: '临时素材库',
                 subtitle: '管理对话素材、朋友圈素材等',
                 onTap: () => Navigator.pushNamed(context, '/temp-material'),
-              ),
-              _SettingsTile(
-                icon: Icons.tune,
-                title: '任务生成配置',
-                subtitle: '设置AI生成任务的规则',
-                onTap: () => Navigator.pushNamed(context, '/ai-models'),
               ),
             ],
           ),

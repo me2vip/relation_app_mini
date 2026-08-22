@@ -7,6 +7,7 @@ import '../../core/providers/profile_provider.dart';
 import '../../models/contact.dart';
 import '../../models/contact_social.dart';
 import '../../models/user_profile.dart';
+import '../widgets/unified_ai_dialog.dart';
 
 class ContactSocialPage extends StatefulWidget {
   final Contact contact;
@@ -666,64 +667,22 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                   style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white, width: 1.2),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(Icons.bolt, size: 18),
-                        label: const Text('内部AI生成', style: TextStyle(fontWeight: FontWeight.w600)),
-                        onPressed: isGenerating
-                            ? null
-                            : () async {
-                          provider.setGeneratingOutline(true);
-                          try {
-                            await Future.delayed(const Duration(milliseconds: 500));
-                            final result = provider.generateOutlineWithInternalAI(
-                              contact: widget.contact,
-                              social: social,
-                              userProfile: userProfile,
-                            );
-                            await provider.applyGeneratedOutline(
-                              contactId: widget.contact.id,
-                              outlineTopics: List<String>.from(result['outlineTopics']),
-                              avoidTopics: List<String>.from(result['avoidTopics']),
-                              customOutline: result['customOutline'] as String,
-                            );
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('社交大纲已生成 ✓')),
-                              );
-                            }
-                          } finally {
-                            provider.setGeneratingOutline(false);
-                          }
-                        },
-                      ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF6366F1),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      elevation: 0,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF6366F1),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('外部AI生成', style: TextStyle(fontWeight: FontWeight.w600)),
-                        onPressed: isGenerating
-                            ? null
-                            : () => _showExternalAIOutlineDialog(provider, social),
-                      ),
-                    ),
-                  ],
+                    icon: const Icon(Icons.auto_awesome, size: 20),
+                    label: const Text('AI 生成社交大纲', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onPressed: isGenerating
+                        ? null
+                        : () => _showUnifiedOutlineDialog(provider, social, userProfile),
+                  ),
                 ),
                 if (isGenerating) ...[
                   const SizedBox(height: 12),
@@ -930,176 +889,65 @@ class _ContactSocialPageState extends State<ContactSocialPage>
     );
   }
 
-  // ===== 外部AI生成社交大纲对话框 =====
-  Future<void> _showExternalAIOutlineDialog(
+  // ===== 统一AI生成社交大纲对话框 =====
+  Future<void> _showUnifiedOutlineDialog(
     ContactSocialProvider provider,
     ContactSocial social,
+    UserProfile? userProfile,
   ) async {
-    final profileProvider = context.read<ProfileProvider>();
-    final userProfile = profileProvider.profile;
     final prompt = provider.buildExternalAIOutlinePrompt(
       contact: widget.contact,
       social: social,
       userProfile: userProfile,
     );
-    final pasteController = TextEditingController();
-    final tabController = TabController(length: 2, vsync: this);
 
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: const [
-            Icon(Icons.auto_awesome, color: Color(0xFF6366F1)),
-            SizedBox(width: 8),
-            Text('外部AI生成社交大纲'),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TabBar(
-                controller: tabController,
-                labelColor: const Color(0xFF6366F1),
-                unselectedLabelColor: Colors.grey,
-                tabs: const [
-                  Tab(text: '① 复制提示词'),
-                  Tab(text: '② 粘贴结果'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TabBarView(
-                  controller: tabController,
-                  children: [
-                    // ===== Tab 1: 提示词复制 =====
-                    SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '将以下内容复制到任意 AI App（千问/豆包/ChatGPT等）：',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: SelectableText(
-                              prompt,
-                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () async {
-                                await Clipboard.setData(ClipboardData(text: prompt));
-                                if (ctx.mounted) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(content: Text('提示词已复制 ✓')),
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.copy),
-                              label: const Text('复制提示词'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // ===== Tab 2: 粘贴结果 =====
-                    SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '粘贴 AI 返回的 JSON 结果：',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: pasteController,
-                            maxLines: 12,
-                            decoration: const InputDecoration(
-                              hintText: '粘贴AI返回的JSON，例如：\n{\n  "outlineTopics": [...],\n  "avoidTopics": [...],\n  "customOutline": "..."\n}',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final text = pasteController.text.trim();
-              if (text.isEmpty) {
-                tabController.animateTo(1);
-                return;
-              }
-              try {
-                final parsed = jsonDecode(text) as Map<String, dynamic>;
-                final List<String> outlineTopics = (parsed['outlineTopics'] as List?)
-                    ?.map((e) => e.toString()).toList() ?? [];
-                final List<String> avoidTopics = (parsed['avoidTopics'] as List?)
-                    ?.map((e) => e.toString()).toList() ?? [];
-                final String? customOutline = parsed['customOutline'] as String?;
-
-                if (outlineTopics.isEmpty && avoidTopics.isEmpty &&
-                    (customOutline == null || customOutline.isEmpty)) {
-                  throw Exception('内容为空');
-                }
-
-                await provider.applyGeneratedOutline(
-                  contactId: widget.contact.id,
-                  outlineTopics: outlineTopics,
-                  avoidTopics: avoidTopics,
-                  customOutline: customOutline,
-                );
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('社交大纲已应用 ✓')),
-                  );
-                  Navigator.pop(ctx, true);
-                }
-              } catch (e) {
-                showDialog(
-                  context: ctx,
-                  builder: (ctx2) => AlertDialog(
-                    title: const Text('解析失败'),
-                    content: Text('无法解析返回结果，请确认是合法的JSON格式。\n\n错误：$e'),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx2),
-                        child: const Text('好的'),
-                      ),
-                    ],
-                  ),
-                );
-              }
-            },
-            child: const Text('应用结果'),
-          ),
-        ],
-      ),
+    final result = await UnifiedAIDialog.show(
+      context,
+      title: 'AI 生成社交大纲',
+      prompt: prompt,
+      resultHint: '粘贴AI返回的JSON结果',
+      resultPlaceholder: '粘贴AI返回的JSON，例如：\n{\n  "outlineTopics": [...],\n  "avoidTopics": [...],\n  "customOutline": "..."\n}',
+      parseResult: (text) {
+        try {
+          final parsed = jsonDecode(text) as Map<String, dynamic>;
+          final outlineTopics = (parsed['outlineTopics'] as List?)
+              ?.map((e) => e.toString()).toList() ?? [];
+          final avoidTopics = (parsed['avoidTopics'] as List?)
+              ?.map((e) => e.toString()).toList() ?? [];
+          final customOutline = parsed['customOutline'] as String?;
+          if (outlineTopics.isEmpty && avoidTopics.isEmpty &&
+              (customOutline == null || customOutline.isEmpty)) {
+            return null;
+          }
+          return {
+            'outlineTopics': outlineTopics,
+            'avoidTopics': avoidTopics,
+            'customOutline': customOutline,
+          };
+        } catch (_) {
+          return null;
+        }
+      },
     );
+
+    if (result != null && mounted) {
+      provider.setGeneratingOutline(true);
+      try {
+        await provider.applyGeneratedOutline(
+          contactId: widget.contact.id,
+          outlineTopics: List<String>.from(result['outlineTopics'] ?? []),
+          avoidTopics: List<String>.from(result['avoidTopics'] ?? []),
+          customOutline: result['customOutline'] as String?,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('社交大纲已生成 ✓')),
+          );
+        }
+      } finally {
+        provider.setGeneratingOutline(false);
+      }
+    }
   }
 
   Future<void> _showAddLogDialog(BuildContext context) async {
@@ -1286,51 +1134,22 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                   style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
                 ),
                 const SizedBox(height: 14),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: const BorderSide(color: Colors.white, width: 1.2),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                        ),
-                        icon: const Icon(Icons.bolt, size: 18),
-                        label: const Text('内部AI分析', style: TextStyle(fontWeight: FontWeight.w600)),
-                        onPressed: isAnalyzing
-                            ? null
-                            : () => _showFeedbackDialog(
-                                  provider,
-                                  social,
-                                  userProfile,
-                                  useExternalAI: false,
-                                ),
-                      ),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF10B981),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 11),
+                      elevation: 0,
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: const Color(0xFF10B981),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          elevation: 0,
-                        ),
-                        icon: const Icon(Icons.open_in_new, size: 18),
-                        label: const Text('外部AI分析', style: TextStyle(fontWeight: FontWeight.w600)),
-                        onPressed: isAnalyzing
-                            ? null
-                            : () => _showFeedbackDialog(
-                                  provider,
-                                  social,
-                                  userProfile,
-                                  useExternalAI: true,
-                                ),
-                      ),
-                    ),
-                  ],
+                    icon: const Icon(Icons.psychology_alt, size: 20),
+                    label: const Text('AI 分析信任度', style: TextStyle(fontWeight: FontWeight.w600)),
+                    onPressed: isAnalyzing
+                        ? null
+                        : () => _showFeedbackDialog(provider, social, userProfile),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -1686,9 +1505,8 @@ class _ContactSocialPageState extends State<ContactSocialPage>
   Future<void> _showFeedbackDialog(
     ContactSocialProvider provider,
     ContactSocial social,
-    UserProfile? userProfile, {
-    required bool useExternalAI,
-  }) async {
+    UserProfile? userProfile,
+  ) async {
     final contentController = TextEditingController();
     int satisfaction = 3;
     String? emotionalTone;
@@ -1704,10 +1522,10 @@ class _ContactSocialPageState extends State<ContactSocialPage>
         builder: (ctx, setDialogState) {
           return AlertDialog(
             title: Row(
-              children: [
-                Icon(useExternalAI ? Icons.open_in_new : Icons.bolt, color: const Color(0xFF10B981)),
-                const SizedBox(width: 8),
-                Text(useExternalAI ? '外部AI信任度分析' : '内部AI信任度分析'),
+              children: const [
+                Icon(Icons.feedback, color: Color(0xFF10B981)),
+                SizedBox(width: 8),
+                Text('互动反馈'),
               ],
             ),
             content: SingleChildScrollView(
@@ -1863,7 +1681,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
                     'tags': tags,
                   });
                 },
-                child: Text(useExternalAI ? '生成提示词' : '立即分析'),
+                child: const Text('下一步'),
               ),
             ],
           );
@@ -1885,28 +1703,57 @@ class _ContactSocialPageState extends State<ContactSocialPage>
       tags: List<String>.from(result['tags'] as List? ?? []),
     );
 
-    if (useExternalAI) {
-      // ===== 外部AI流程：显示双Tab对话框（复制提示词/粘贴结果）=====
-      if (!mounted) return;
-      await _showExternalAITrustDialog(provider, social, feedback, userProfile);
-    } else {
-      // ===== 内部AI直接分析 =====
+    // 使用统一AI对话框（内部AI + 外部AI）
+    final prompt = provider.buildExternalAITrustPrompt(
+      contact: widget.contact,
+      social: social,
+      feedback: feedback,
+      userProfile: userProfile,
+    );
+
+    final aiResult = await UnifiedAIDialog.show(
+      context,
+      title: 'AI 信任度分析',
+      prompt: prompt,
+      resultHint: '粘贴AI返回的JSON结果',
+      resultPlaceholder: '粘贴AI返回的JSON，例如：\n{\n  "taTrustLevel": 7,\n  "myTrustLevel": 6,\n  "reason": "互动满意度高且对方分享了秘密",\n  "detail": "...详细分析..."\n}',
+      parseResult: (text) {
+        try {
+          final parsed = jsonDecode(text) as Map<String, dynamic>;
+          final ta = parsed['taTrustLevel'];
+          final my = parsed['myTrustLevel'];
+          final taVal = ta is int ? ta : int.tryParse(ta.toString());
+          final myVal = my is int ? my : int.tryParse(my.toString());
+          if (taVal == null || myVal == null || taVal < 1 || taVal > 10 || myVal < 1 || myVal > 10) {
+            return null;
+          }
+          return {
+            'taTrustLevel': taVal,
+            'myTrustLevel': myVal,
+            'reason': (parsed['reason'] as String?)?.trim().isEmpty ?? true
+                ? 'AI信任度分析' : parsed['reason'] as String,
+            'detail': parsed['detail'] as String?,
+          };
+        } catch (_) {
+          return null;
+        }
+      },
+    );
+
+    if (aiResult != null && mounted) {
       provider.setAnalyzingTrust(true);
       try {
-        await Future.delayed(const Duration(milliseconds: 600));
-        final analysis = provider.analyzeTrustWithInternalAI(
-          contact: widget.contact,
-          social: social,
-          feedback: feedback,
-          userProfile: userProfile,
-        );
+        // 判断来源：如果是从内部AI Tab来的，标记为internalAI
+        final source = aiResult.containsKey('rawResult')
+            ? TrustChangeSource.internalAI
+            : TrustChangeSource.externalAI;
         await provider.applyAnalyzedTrust(
           contactId: widget.contact.id,
-          taTrustLevel: analysis['taTrustLevel'] as int,
-          myTrustLevel: analysis['myTrustLevel'] as int,
-          reason: analysis['reason'] as String,
-          detail: analysis['detail'] as String,
-          source: TrustChangeSource.internalAI,
+          taTrustLevel: aiResult['taTrustLevel'] as int,
+          myTrustLevel: aiResult['myTrustLevel'] as int,
+          reason: aiResult['reason'] as String,
+          detail: aiResult['detail'] as String?,
+          source: source,
         );
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2091,173 +1938,5 @@ class _ContactSocialPageState extends State<ContactSocialPage>
     );
   }
 
-  // ===== 外部AI信任度分析双Tab对话框 =====
-  Future<void> _showExternalAITrustDialog(
-    ContactSocialProvider provider,
-    ContactSocial social,
-    InteractionFeedback feedback,
-    UserProfile? userProfile,
-  ) async {
-    final prompt = provider.buildExternalAITrustPrompt(
-      contact: widget.contact,
-      social: social,
-      feedback: feedback,
-      userProfile: userProfile,
-    );
-    final pasteController = TextEditingController();
-    final tabController = TabController(length: 2, vsync: this);
-
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: const [
-            Icon(Icons.psychology_alt, color: Color(0xFF10B981)),
-            SizedBox(width: 8),
-            Text('外部AI信任度分析'),
-          ],
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TabBar(
-                controller: tabController,
-                labelColor: const Color(0xFF10B981),
-                unselectedLabelColor: Colors.grey,
-                tabs: const [
-                  Tab(text: '① 复制提示词'),
-                  Tab(text: '② 粘贴结果'),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: TabBarView(
-                  controller: tabController,
-                  children: [
-                    SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '将以下内容复制到任意 AI App（千问/豆包/ChatGPT等）：',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade300),
-                            ),
-                            child: SelectableText(
-                              prompt,
-                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-                              onPressed: () async {
-                                await Clipboard.setData(ClipboardData(text: prompt));
-                                if (ctx.mounted) {
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    const SnackBar(content: Text('提示词已复制 ✓')),
-                                  );
-                                }
-                              },
-                              icon: const Icon(Icons.copy),
-                              label: const Text('复制提示词'),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '粘贴 AI 返回的 JSON 结果：',
-                            style: TextStyle(fontSize: 13, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: pasteController,
-                            maxLines: 12,
-                            decoration: const InputDecoration(
-                              hintText: '粘贴AI返回的JSON，例如：\n{\n  "taTrustLevel": 7,\n  "myTrustLevel": 6,\n  "reason": "互动满意度高且对方分享了秘密",\n  "detail": "...详细分析..."\n}',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('取消'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
-            onPressed: () async {
-              final text = pasteController.text.trim();
-              if (text.isEmpty) {
-                tabController.animateTo(1);
-                return;
-              }
-              try {
-                final parsed = jsonDecode(text) as Map<String, dynamic>;
-                final ta = parsed['taTrustLevel'];
-                final my = parsed['myTrustLevel'];
-                final taVal = ta is int ? ta : int.tryParse(ta.toString());
-                final myVal = my is int ? my : int.tryParse(my.toString());
-                final reason = (parsed['reason'] as String?)?.trim() ?? '外部AI分析';
-                final detail = parsed['detail'] as String?;
-                if (taVal == null || myVal == null || taVal < 1 || taVal > 10 || myVal < 1 || myVal > 10) {
-                  throw Exception('taTrustLevel 或 myTrustLevel 不在1-10范围内');
-                }
-                await provider.applyAnalyzedTrust(
-                  contactId: widget.contact.id,
-                  taTrustLevel: taVal,
-                  myTrustLevel: myVal,
-                  reason: reason,
-                  detail: detail,
-                  source: TrustChangeSource.externalAI,
-                );
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(
-                    const SnackBar(content: Text('信任度已应用 ✓')),
-                  );
-                  Navigator.pop(ctx, true);
-                }
-              } catch (e) {
-                showDialog(
-                  context: ctx,
-                  builder: (ctx2) => AlertDialog(
-                    title: const Text('解析失败'),
-                    content: Text('无法解析返回结果，请确认是合法的JSON格式。\n\n错误：$e'),
-                    actions: [
-                      TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('好的')),
-                    ],
-                  ),
-                );
-              }
-            },
-            child: const Text('应用结果'),
-          ),
-        ],
-      ),
-    );
-  }
+  // _showExternalAITrustDialog 已被 UnifiedAIDialog 替代
 }

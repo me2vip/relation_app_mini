@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/providers/ai_provider.dart';
 import '../../models/ai_config.dart';
+import '../../services/ai_service.dart';
 
 class AIModelManagePage extends StatefulWidget {
   const AIModelManagePage({super.key});
@@ -57,9 +58,13 @@ class _AIModelManagePageState extends State<AIModelManagePage> {
   }
 
   void _editModel(BuildContext context, AIProvider provider, AIModel model) {
-    // TODO: 实现编辑模型
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('编辑功能开发中')),
+    showDialog(
+      context: context,
+      builder: (ctx) => _ModelEditDialog(
+        provider: provider,
+        model: model,
+        isEdit: true,
+      ),
     );
   }
 
@@ -101,9 +106,14 @@ class _AIModelManagePageState extends State<AIModelManagePage> {
   }
 
   void _addModel(BuildContext context) {
-    // TODO: 实现添加模型
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('添加功能开发中')),
+    final provider = context.read<AIProvider>();
+    showDialog(
+      context: context,
+      builder: (ctx) => _ModelEditDialog(
+        provider: provider,
+        model: provider.createEmptyModel(),
+        isEdit: false,
+      ),
     );
   }
 }
@@ -225,6 +235,263 @@ class _ModelCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// AI模型编辑/添加对话框
+class _ModelEditDialog extends StatefulWidget {
+  final AIProvider provider;
+  final AIModel model;
+  final bool isEdit;
+
+  const _ModelEditDialog({
+    required this.provider,
+    required this.model,
+    required this.isEdit,
+  });
+
+  @override
+  State<_ModelEditDialog> createState() => _ModelEditDialogState();
+}
+
+class _ModelEditDialogState extends State<_ModelEditDialog> {
+  late TextEditingController _nameCtrl;
+  late TextEditingController _apiUrlCtrl;
+  late TextEditingController _apiKeyCtrl;
+  late TextEditingController _maxTokensCtrl;
+  late TextEditingController _temperatureCtrl;
+  late AIModelProvider _selectedProvider;
+  bool _supportsVision = false;
+  bool _supportsFileUpload = false;
+  bool _isTesting = false;
+  String? _testResult;
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.model;
+    _nameCtrl = TextEditingController(text: m.name);
+    _apiUrlCtrl = TextEditingController(text: m.apiUrl);
+    _apiKeyCtrl = TextEditingController(text: m.apiKey ?? '');
+    _maxTokensCtrl = TextEditingController(text: m.maxTokens?.toString() ?? '');
+    _temperatureCtrl = TextEditingController(text: m.temperature?.toString() ?? '');
+    _selectedProvider = m.provider;
+    _supportsVision = m.supportsVision;
+    _supportsFileUpload = m.supportsFileUpload;
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _apiUrlCtrl.dispose();
+    _apiKeyCtrl.dispose();
+    _maxTokensCtrl.dispose();
+    _temperatureCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.isEdit ? '编辑AI模型' : '添加AI模型'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 模型名称
+              TextField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: '模型名称',
+                  hintText: '如 gpt-4o-mini, qwen-plus',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // 供应商
+              DropdownButtonFormField<AIModelProvider>(
+                value: _selectedProvider,
+                decoration: const InputDecoration(
+                  labelText: 'AI供应商',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: AIModelProvider.openai, child: Text('OpenAI兼容')),
+                  DropdownMenuItem(value: AIModelProvider.claude, child: Text('Claude')),
+                  DropdownMenuItem(value: AIModelProvider.dashscope, child: Text('通义千问')),
+                  DropdownMenuItem(value: AIModelProvider.local, child: Text('本地LLM')),
+                ],
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _selectedProvider = v;
+                      // 自动填充默认API URL
+                      if (_apiUrlCtrl.text.isEmpty) {
+                        switch (v) {
+                          case AIModelProvider.openai:
+                            _apiUrlCtrl.text = 'https://api.openai.com/v1';
+                            break;
+                          case AIModelProvider.claude:
+                            _apiUrlCtrl.text = 'https://api.anthropic.com/v1';
+                            break;
+                          case AIModelProvider.dashscope:
+                            _apiUrlCtrl.text = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+                            break;
+                          case AIModelProvider.local:
+                            _apiUrlCtrl.text = 'http://localhost:11434/v1';
+                            break;
+                          case AIModelProvider.external:
+                            break;
+                        }
+                      }
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              // API URL
+              TextField(
+                controller: _apiUrlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'API地址',
+                  hintText: 'https://api.example.com/v1',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // API Key
+              TextField(
+                controller: _apiKeyCtrl,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'API Key',
+                  hintText: 'sk-...',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // 最大Token和温度
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _maxTokensCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: '最大Token',
+                        hintText: '4096',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _temperatureCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: '温度',
+                        hintText: '0.7',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // 能力开关
+              SwitchListTile(
+                title: const Text('支持图片识别'),
+                contentPadding: EdgeInsets.zero,
+                value: _supportsVision,
+                onChanged: (v) => setState(() => _supportsVision = v),
+              ),
+              SwitchListTile(
+                title: const Text('支持文件上传'),
+                contentPadding: EdgeInsets.zero,
+                value: _supportsFileUpload,
+                onChanged: (v) => setState(() => _supportsFileUpload = v),
+              ),
+              const SizedBox(height: 8),
+              // 测试连接按钮
+              OutlinedButton.icon(
+                onPressed: _isTesting
+                    ? null
+                    : () async {
+                        setState(() {
+                          _isTesting = true;
+                          _testResult = null;
+                        });
+                        final testModel = AIModel(
+                          id: widget.model.id,
+                          name: _nameCtrl.text.trim(),
+                          provider: _selectedProvider,
+                          apiUrl: _apiUrlCtrl.text.trim(),
+                          apiKey: _apiKeyCtrl.text.trim(),
+                        );
+                        final ok = await AIService.testConnection(testModel);
+                        setState(() {
+                          _isTesting = false;
+                          _testResult = ok ? '连接成功 ✓' : '连接失败，请检查配置';
+                        });
+                      },
+                icon: _isTesting
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.wifi_find),
+                label: const Text('测试连接'),
+              ),
+              if (_testResult != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    _testResult!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: _testResult!.contains('成功') ? Colors.green : Colors.red,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        ElevatedButton(
+          onPressed: () async {
+            if (_nameCtrl.text.trim().isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('请输入模型名称')),
+              );
+              return;
+            }
+            final updatedModel = widget.model.copyWith(
+              name: _nameCtrl.text.trim(),
+              provider: _selectedProvider,
+              apiUrl: _apiUrlCtrl.text.trim().isEmpty ? 'https://api.openai.com/v1' : _apiUrlCtrl.text.trim(),
+              apiKey: _apiKeyCtrl.text.trim().isEmpty ? null : _apiKeyCtrl.text.trim(),
+              maxTokens: int.tryParse(_maxTokensCtrl.text.trim()),
+              temperature: double.tryParse(_temperatureCtrl.text.trim()),
+              supportsVision: _supportsVision,
+              supportsFileUpload: _supportsFileUpload,
+            );
+            await widget.provider.updateModel(updatedModel);
+            if (context.mounted) {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(widget.isEdit ? '模型已更新 ✓' : '模型已添加 ✓')),
+              );
+            }
+          },
+          child: Text(widget.isEdit ? '保存' : '添加'),
+        ),
+      ],
     );
   }
 }
