@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -30,13 +31,8 @@ class ProfileProvider extends ChangeNotifier {
       final profileJson = prefs.getString(_profileKey);
 
       if (profileJson != null) {
-        _profile = UserProfile.fromJson(
-          Map<String, dynamic>.from(
-            Map<String, dynamic>.from(
-              profileJson as Map<String, dynamic>,
-            ),
-          ),
-        );
+        final decoded = jsonDecode(profileJson) as Map<String, dynamic>;
+        _profile = UserProfile.fromJson(decoded);
       } else {
         _profile = UserProfile.createDefault();
         await _saveProfile();
@@ -46,11 +42,7 @@ class ProfileProvider extends ChangeNotifier {
       if (logsJson != null) {
         _changeLogs = logsJson
             .map((j) => ProfileChangeLog.fromJson(
-                  Map<String, dynamic>.from(
-                    Map<String, dynamic>.from(
-                      j as Map<String, dynamic>,
-                    ),
-                  ),
+                  jsonDecode(j) as Map<String, dynamic>,
                 ))
             .toList();
       }
@@ -58,6 +50,8 @@ class ProfileProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      // 解析失败时用默认画像兜底，避免页面永久转圈
+      _profile = UserProfile.createDefault();
       _isLoading = false;
       notifyListeners();
     }
@@ -66,14 +60,14 @@ class ProfileProvider extends ChangeNotifier {
   Future<void> _saveProfile() async {
     if (_profile == null) return;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_profileKey, _profile!.toJson().toString());
+    await prefs.setString(_profileKey, jsonEncode(_profile!.toJson()));
   }
 
   Future<void> _saveChangeLogs() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
       _changeLogsKey,
-      _changeLogs.map((l) => l.toJson().toString()).toList(),
+      _changeLogs.map((l) => jsonEncode(l.toJson())).toList(),
     );
   }
 

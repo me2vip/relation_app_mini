@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
@@ -39,9 +40,7 @@ class ContactSocialProvider extends ChangeNotifier {
           final json = prefs.getString(key);
           if (json != null) {
             _socials[contactId] = ContactSocial.fromJson(
-              Map<String, dynamic>.from(
-                json as Map,
-              ),
+              jsonDecode(json) as Map<String, dynamic>,
             );
           }
         } else if (key.startsWith(_logsKey)) {
@@ -50,9 +49,7 @@ class ContactSocialProvider extends ChangeNotifier {
           if (jsonList != null) {
             _logs[contactId] = jsonList
                 .map((j) => InteractionLog.fromJson(
-                      Map<String, dynamic>.from(
-                        j as Map,
-                      ),
+                      jsonDecode(j) as Map<String, dynamic>,
                     ))
                 .toList();
           }
@@ -62,9 +59,7 @@ class ContactSocialProvider extends ChangeNotifier {
           if (jsonList != null) {
             _trustRecords[contactId] = jsonList
                 .map((j) => TrustChangeRecord.fromJson(
-                      Map<String, dynamic>.from(
-                        j as Map,
-                      ),
+                      jsonDecode(j) as Map<String, dynamic>,
                     ))
                 .toList();
           }
@@ -128,7 +123,7 @@ class ContactSocialProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       '$_socialKey$contactId',
-      updated.toJson().toString(),
+      jsonEncode(updated.toJson()),
     );
 
     // 如果信任度有变化，记录变化
@@ -187,7 +182,7 @@ class ContactSocialProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
       '$_trustKey$contactId',
-      list.map((r) => r.toJson().toString()).toList(),
+      list.map((r) => jsonEncode(r.toJson())).toList(),
     );
   }
 
@@ -238,7 +233,7 @@ class ContactSocialProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
       '$_logsKey$contactId',
-      list.map((l) => l.toJson().toString()).toList(),
+      list.map((l) => jsonEncode(l.toJson())).toList(),
     );
 
     notifyListeners();
@@ -254,7 +249,7 @@ class ContactSocialProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList(
         '$_logsKey$contactId',
-        list.map((l) => l.toJson().toString()).toList(),
+        list.map((l) => jsonEncode(l.toJson())).toList(),
       );
       notifyListeners();
     }
