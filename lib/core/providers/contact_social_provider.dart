@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import '../../models/contact.dart';
 import '../../models/contact_social.dart';
 import '../../models/user_profile.dart';
 
@@ -376,7 +377,7 @@ class ContactSocialProvider extends ChangeNotifier {
       case SocialDirection.repair:
         outlineTopics.addAll(['日常问候', '轻松话题', '过去美好回忆', '共同兴趣']);
         break;
-      case SocialDirection.transform:
+      case SocialDirection.transition:
         outlineTopics.addAll(['情感话题', '兴趣爱好', '未来规划', '约会提议', '生活近况']);
         break;
       case SocialDirection.casual:
@@ -400,7 +401,7 @@ class ContactSocialProvider extends ChangeNotifier {
         break;
       case RelationshipStage.closeFriend:
       case RelationshipStage.bestFriend:
-      case RelationshipStage.soulMate:
+      case RelationshipStage.confidant:
       case RelationshipStage.intimate:
         outlineTopics.addAll(['内心感受', '情感话题', '深度交流']);
         break;
@@ -494,7 +495,7 @@ ${_stageFocus(stage, target, direction, contact.name)}
       case SocialDirection.maintain: return '维持现状';
       case SocialDirection.deepen: return '深化关系';
       case SocialDirection.repair: return '修复关系';
-      case SocialDirection.transform: return '转变关系';
+      case SocialDirection.transition: return '转变关系';
       case SocialDirection.casual: return '轻松社交';
       case SocialDirection.business: return '业务社交';
     }
@@ -507,7 +508,7 @@ ${_stageFocus(stage, target, direction, contact.name)}
       case RelationshipStage.friend: return '朋友';
       case RelationshipStage.closeFriend: return '好友';
       case RelationshipStage.bestFriend: return '挚友';
-      case RelationshipStage.soulMate: return '知己';
+      case RelationshipStage.confidant: return '知己';
       case RelationshipStage.intimate: return '亲密关系';
     }
   }
@@ -525,7 +526,7 @@ ${_stageFocus(stage, target, direction, contact.name)}
         return '当前是朋友阶段：保持定期联系 → 主动关心对方重要时刻（生日、节日、重大事件）→ 讨论共同兴趣 → 可以尝试更深入话题。';
       case RelationshipStage.closeFriend:
       case RelationshipStage.bestFriend:
-      case RelationshipStage.soulMate:
+      case RelationshipStage.confidant:
       case RelationshipStage.intimate:
         return '当前已是深度关系：维持温度的关键是持续真诚 → 重要时刻必须在线 → 深度情感支持 → 保持适度神秘感和新鲜感。';
     }
@@ -762,18 +763,6 @@ ${_buildTrustAdvice(newTa, newMy, social.currentStage, feedback)}
     }
 
     return advice.join('\n');
-  }
-
-  String _stageToText(RelationshipStage s) {
-    switch (s) {
-      case RelationshipStage.stranger: return '陌生人';
-      case RelationshipStage.acquaintance: return '熟人';
-      case RelationshipStage.friend: return '朋友';
-      case RelationshipStage.closeFriend: return '好友';
-      case RelationshipStage.bestFriend: return '挚友';
-      case RelationshipStage.confidant: return '知己';
-      case RelationshipStage.intimate: return '亲密关系';
-    }
   }
 
   /// 生成用于外部AI调用的信任度分析提示词

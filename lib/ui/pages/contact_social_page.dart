@@ -6,6 +6,7 @@ import '../../core/providers/contact_social_provider.dart';
 import '../../core/providers/profile_provider.dart';
 import '../../models/contact.dart';
 import '../../models/contact_social.dart';
+import '../../models/user_profile.dart';
 
 class ContactSocialPage extends StatefulWidget {
   final Contact contact;
