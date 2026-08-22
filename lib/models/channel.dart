@@ -114,37 +114,56 @@ class SocialChannel {
 /// 为常见父途径预置的默认子类型（首次加载时若父途径尚无子途径则自动插入）
 /// 结构: {父途径platformKey: [子途径名, emoji, 描述]}
 const Map<String, List<Map<String, String>>> defaultSubChannels = {
+  'offline': [
+    {'name': '面对面互动', 'icon': '🤝', 'description': '线下面对面聊天、见面聚会'},
+  ],
   'wechat': [
     {'name': '私聊', 'icon': '💬', 'description': '一对一微信私聊'},
-    {'name': '朋友圈', 'icon': '📸', 'description': '点赞/评论/发圈互动'},
-    {'name': '微信群', 'icon': '👥', 'description': '共同群聊互动'},
-    {'name': '视频号', 'icon': '🎥', 'description': '视频号互动'},
+    {'name': '群聊', 'icon': '👥', 'description': '微信群共同聊天互动'},
+    {'name': '朋友圈', 'icon': '📸', 'description': '朋友圈点赞/评论/发圈互动'},
   ],
   'qq': [
     {'name': '私聊', 'icon': '💬', 'description': '一对一QQ私聊'},
-    {'name': 'QQ群', 'icon': '👥', 'description': 'QQ群聊互动'},
-    {'name': 'QQ空间', 'icon': '🌌', 'description': 'QQ空间动态'},
-  ],
-  'offline': [
-    {'name': '见面', 'icon': '🤝', 'description': '线下面对面'},
-    {'name': '聚餐', 'icon': '🍜', 'description': '一起吃饭'},
-    {'name': '户外活动', 'icon': '🏕️', 'description': '徒步/运动/游玩'},
+    {'name': '群聊', 'icon': '👥', 'description': 'QQ群聊互动'},
+    {'name': '动态', 'icon': '🌌', 'description': 'QQ空间动态点赞/评论互动'},
   ],
   'phone': [
-    {'name': '日常通话', 'icon': '📞', 'description': '普通问候/聊天'},
-    {'name': '紧急电话', 'icon': '🆘', 'description': '紧急事务专用'},
+    {'name': '语音', 'icon': '📞', 'description': '语音电话沟通'},
+    {'name': '视频', 'icon': '🎥', 'description': '视频电话沟通'},
+    {'name': '短信', 'icon': '✉️', 'description': '手机短信往来'},
+  ],
+  'douyin': [
+    {'name': '私聊', 'icon': '✉️', 'description': '抖音私信聊天'},
+    {'name': '日常', 'icon': '🎬', 'description': '日常视频/评论区互动'},
+  ],
+  'kuaishou': [
+    {'name': '私聊', 'icon': '✉️', 'description': '快手私信聊天'},
+    {'name': '日常', 'icon': '🎬', 'description': '日常短视频/评论区互动'},
+  ],
+  'xiaohongshu': [
+    {'name': '私信', 'icon': '✉️', 'description': '小红书私信聊天'},
+    {'name': '笔记评论', 'icon': '📝', 'description': '笔记评论区点赞/互动'},
+  ],
+  'weibo': [
+    {'name': '私信', 'icon': '✉️', 'description': '微博私信聊天'},
+    {'name': '微博互动', 'icon': '📰', 'description': '发博/转发/评论/点赞互动'},
+  ],
+  'bilibili': [
+    {'name': '私信', 'icon': '✉️', 'description': 'B站私信聊天'},
+    {'name': '弹幕评论', 'icon': '📺', 'description': '视频弹幕/评论区互动'},
+    {'name': '动态', 'icon': '✨', 'description': 'UP主动态互动'},
+  ],
+  'wangzhe': [
+    {'name': '组队开黑', 'icon': '⚔️', 'description': '一起组队打王者'},
+    {'name': '游戏内聊天', 'icon': '💬', 'description': '王者荣耀内置聊天'},
+  ],
+  'pubg': [
+    {'name': '组队吃鸡', 'icon': '🔫', 'description': '一起组队打和平精英'},
+    {'name': '游戏内聊天', 'icon': '💬', 'description': '和平精英内置聊天'},
   ],
   'sms': [
     {'name': '节日祝福', 'icon': '🎉', 'description': '节假日问候短信'},
-    {'name': '日常提醒', 'icon': '⏰', 'description': '事项/约会提醒'},
-  ],
-  'douyin': [
-    {'name': '私信', 'icon': '✉️', 'description': '抖音私信'},
-    {'name': '评论互动', 'icon': '💬', 'description': '视频评论区互动'},
-  ],
-  'xiaohongshu': [
-    {'name': '私信', 'icon': '✉️', 'description': '小红书私信'},
-    {'name': '笔记评论', 'icon': '📝', 'description': '笔记评论区互动'},
+    {'name': '日常提醒', 'icon': '⏰', 'description': '事项/约会提醒短信'},
   ],
 };
 
