@@ -425,26 +425,26 @@ Widget _buildSectionTitle(
   Color lightColor,
 ) =>
     Padding(
-      padding: const EdgeInsets.only(bottom: 10, left: 4),
+      padding: const EdgeInsets.only(bottom: 12, left: 2, top: 4),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [levelColor, lightColor],
-              ),
-              borderRadius: BorderRadius.circular(8),
+              color: levelColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(icon, color: Colors.white, size: 16),
+            child: Icon(icon, color: levelColor, size: 18),
           ),
-          const SizedBox(width: 10),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
           ),
         ],
@@ -480,7 +480,7 @@ class _InfoTab extends StatelessWidget {
                 Icons.account_balance, '政治面貌', contact.politicalAffiliation!),
           _infoRow(Icons.favorite, '婚姻状况', contact.maritalStatusName),
         ]),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         if (contact.educationLevel != EducationLevel.unknown ||
             contact.school != null ||
             contact.major != null) ...[
@@ -492,7 +492,7 @@ class _InfoTab extends StatelessWidget {
             if (contact.major != null)
               _infoRow(Icons.menu_book, '专业', contact.major!),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         if (contact.industry != null ||
             contact.company != null ||
@@ -510,7 +510,7 @@ class _InfoTab extends StatelessWidget {
               _infoRow(
                   Icons.timeline, '过往经历', contact.workExperience!),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         _sectionTitle('个性与价值观', Icons.auto_awesome),
         _infoCard([
@@ -527,7 +527,7 @@ class _InfoTab extends StatelessWidget {
           if (contact.values != null)
             _infoRow(Icons.lightbulb, '价值观', contact.values!),
         ]),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         if (contact.hobbies != null ||
             contact.strengths != null ||
             contact.weaknesses != null ||
@@ -554,7 +554,7 @@ class _InfoTab extends StatelessWidget {
               _infoRow(
                   Icons.restaurant, '口味偏好', contact.tastePreferences!),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         if (contact.homeAddress != null ||
             contact.familySituation != null ||
@@ -574,7 +574,7 @@ class _InfoTab extends StatelessWidget {
               _infoRow(Icons.favorite, '感情状况',
                   contact.familyEmotionalStatus!),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         _sectionTitle('信任与关系', Icons.shield),
         _infoCard([
@@ -587,7 +587,7 @@ class _InfoTab extends StatelessWidget {
           if (contact.currentStatus != null)
             _infoRow(Icons.public, '目前现状', contact.currentStatus!),
         ]),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         if (contact.moneyDesireLevel != null ||
             contact.ambitionLevel != null ||
             contact.shortTermGoals != null ||
@@ -610,7 +610,7 @@ class _InfoTab extends StatelessWidget {
             if (contact.goalRelation != null)
               _infoRow(Icons.flag, '目标关系', contact.goalRelation!),
           ]),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         Consumer<ChannelConfigProvider>(
           builder: (context, channelProvider, _) {
@@ -808,7 +808,7 @@ class _InfoTab extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         if (contact.tags.isNotEmpty) ...[
           _sectionTitle('标签', Icons.label),
           Wrap(
@@ -835,7 +835,7 @@ class _InfoTab extends StatelessWidget {
               );
             }).toList(),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
         ],
         _sectionTitle('系统信息', Icons.info_outline),
         _infoCard([
@@ -858,14 +858,14 @@ class _InfoTab extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 10,
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 12,
               offset: const Offset(0, 4),
             ),
           ],
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: const EdgeInsets.all(16),
           child: Column(children: children),
         ),
       );
@@ -873,12 +873,12 @@ class _InfoTab extends StatelessWidget {
   Widget _infoRow(IconData icon, String label, String value,
       {bool highlight = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(7),
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               color: highlight
                   ? Colors.red.withOpacity(0.1)
@@ -886,23 +886,32 @@ class _InfoTab extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon,
-                size: 16,
+                size: 18,
                 color: highlight ? Colors.red : levelColor),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 75,
+          const SizedBox(width: 14),
+          Flexible(
+            flex: 2,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.grey, fontSize: 13),
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.visible,
             ),
           ),
+          const SizedBox(width: 12),
           Expanded(
+            flex: 3,
             child: Text(
               value,
               style: TextStyle(
-                  fontSize: 13,
-                  color: highlight ? Colors.red[700] : Colors.black87),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: highlight ? Colors.red[700] : Colors.black87,
+              ),
             ),
           ),
         ],
@@ -933,7 +942,7 @@ class _InteractionTab extends StatelessWidget {
               ),
               child: const Icon(Icons.history, size: 60, color: Colors.grey),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             const Text('还没有互动记录',
                 style: TextStyle(color: Colors.grey, fontSize: 14)),
           ],
@@ -1095,10 +1104,10 @@ class _TaskTab extends StatelessWidget {
                     child: const Icon(Icons.task_alt,
                         size: 60, color: Colors.grey),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   const Text('还没有任务',
                       style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -1148,7 +1157,7 @@ class _TaskTab extends StatelessWidget {
           children: [
             if (pendingTasks.isNotEmpty) ...[
               _buildTaskSection('待完成', pendingTasks, provider),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
             ],
             if (completedTasks.isNotEmpty) ...[
               _buildTaskSection('已完成', completedTasks, provider),
@@ -1619,7 +1628,7 @@ class _RelationshipTab extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(
@@ -1692,7 +1701,7 @@ class _RelationshipTab extends StatelessWidget {
                           child: const Icon(Icons.timeline,
                               size: 60, color: Colors.grey),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
                         const Text('暂无关系变更记录',
                             style: TextStyle(color: Colors.grey, fontSize: 14)),
                       ],
