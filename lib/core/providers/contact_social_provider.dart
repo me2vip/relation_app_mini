@@ -8,13 +8,16 @@ class ContactSocialProvider extends ChangeNotifier {
   final _uuid = const Uuid();
   static const String _socialKey = 'contact_social_';
   static const String _logsKey = 'interaction_logs_';
+  static const String _trustKey = 'trust_change_';
 
   final Map<String, ContactSocial> _socials = {};
   final Map<String, List<InteractionLog>> _logs = {};
+  final Map<String, List<TrustChangeRecord>> _trustRecords = {};
   bool _isLoading = false;
 
   Map<String, ContactSocial> get socials => _socials;
   Map<String, List<InteractionLog>> get logs => _logs;
+  Map<String, List<TrustChangeRecord>> get trustRecords => _trustRecords;
   bool get isLoading => _isLoading;
 
   ContactSocialProvider() {
@@ -36,9 +39,7 @@ class ContactSocialProvider extends ChangeNotifier {
           if (json != null) {
             _socials[contactId] = ContactSocial.fromJson(
               Map<String, dynamic>.from(
-                Map<String, dynamic>.from(
-                  json as Map<String, dynamic>,
-                ),
+                json as Map,
               ),
             );
           }
@@ -49,9 +50,19 @@ class ContactSocialProvider extends ChangeNotifier {
             _logs[contactId] = jsonList
                 .map((j) => InteractionLog.fromJson(
                       Map<String, dynamic>.from(
-                        Map<String, dynamic>.from(
-                          j as Map<String, dynamic>,
-                        ),
+                        j as Map,
+                      ),
+                    ))
+                .toList();
+          }
+        } else if (key.startsWith(_trustKey)) {
+          final contactId = key.substring(_trustKey.length);
+          final jsonList = prefs.getStringList(key);
+          if (jsonList != null) {
+            _trustRecords[contactId] = jsonList
+                .map((j) => TrustChangeRecord.fromJson(
+                      Map<String, dynamic>.from(
+                        j as Map,
                       ),
                     ))
                 .toList();
@@ -88,8 +99,15 @@ class ContactSocialProvider extends ChangeNotifier {
     List<String>? avoidTopics,
     String? customOutline,
     int? warmthLevel,
+    int? taTrustLevel,
+    int? myTrustLevel,
+    String? trustChangeReason,
+    String? trustChangeDetail,
+    TrustChangeSource trustChangeSource = TrustChangeSource.manual,
   }) async {
     final old = getSocial(contactId);
+    final newTaTrust = taTrustLevel ?? old.taTrustLevel;
+    final newMyTrust = myTrustLevel ?? old.myTrustLevel;
     final updated = old.copyWith(
       direction: direction,
       currentStage: currentStage,
@@ -99,6 +117,8 @@ class ContactSocialProvider extends ChangeNotifier {
       avoidTopics: avoidTopics,
       customOutline: customOutline,
       warmthLevel: warmthLevel,
+      taTrustLevel: newTaTrust,
+      myTrustLevel: newMyTrust,
       updatedAt: DateTime.now(),
     );
 
@@ -110,7 +130,64 @@ class ContactSocialProvider extends ChangeNotifier {
       updated.toJson().toString(),
     );
 
+    // 如果信任度有变化，记录变化
+    final taChanged = taTrustLevel != null && taTrustLevel != old.taTrustLevel;
+    final myChanged = myTrustLevel != null && myTrustLevel != old.myTrustLevel;
+    if (taChanged || myChanged) {
+      await _addTrustChangeRecord(
+        contactId: contactId,
+        oldTa: old.taTrustLevel,
+        oldMy: old.myTrustLevel,
+        newTa: newTaTrust,
+        newMy: newMyTrust,
+        reason: trustChangeReason ?? '手动调整信任度',
+        detail: trustChangeDetail,
+        source: trustChangeSource,
+      );
+    }
+
     notifyListeners();
+  }
+
+  // ============ 信任度变化记录 ============
+
+  List<TrustChangeRecord> getTrustRecords(String contactId) {
+    return _trustRecords[contactId] ?? [];
+  }
+
+  Future<void> _addTrustChangeRecord({
+    required String contactId,
+    required int oldTa,
+    required int oldMy,
+    required int newTa,
+    required int newMy,
+    required String reason,
+    String? detail,
+    required TrustChangeSource source,
+    String? relatedLogId,
+  }) async {
+    final record = TrustChangeRecord(
+      id: _uuid.v4(),
+      contactId: contactId,
+      oldTaTrustLevel: oldTa,
+      oldMyTrustLevel: oldMy,
+      newTaTrustLevel: newTa,
+      newMyTrustLevel: newMy,
+      reason: reason,
+      detail: detail,
+      source: source,
+      relatedLogId: relatedLogId,
+      createdAt: DateTime.now(),
+    );
+
+    final list = _trustRecords.putIfAbsent(contactId, () => []);
+    list.insert(0, record);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(
+      '$_trustKey$contactId',
+      list.map((r) => r.toJson().toString()).toList(),
+    );
   }
 
   Future<void> applyTemplate({
@@ -528,6 +605,333 @@ ${_stageFocus(stage, target, direction, contact.name)}
 
   void setGeneratingOutline(bool v) {
     _isGeneratingOutline = v;
+    notifyListeners();
+  }
+
+  // ============== AI 信任度分析 ==============
+
+  bool _isAnalyzingTrust = false;
+  bool get isAnalyzingTrust => _isAnalyzingTrust;
+
+  /// 内部AI基于互动反馈+已有数据分析信任度
+  /// 返回：{taTrustLevel, myTrustLevel, reason, detail}
+  Map<String, dynamic> analyzeTrustWithInternalAI({
+    required Contact contact,
+    required ContactSocial social,
+    required InteractionFeedback feedback,
+    UserProfile? userProfile,
+  }) {
+    final logs = getLogsForContact(contact.id);
+    final oldTa = social.taTrustLevel;
+    final oldMy = social.myTrustLevel;
+
+    // ===== TA对我的信任度变化计算 =====
+    int taDelta = 0;
+    // 满意度影响
+    taDelta += (feedback.satisfaction - 3); // 3为中性，5+2，1-2
+    // 情绪影响
+    if (feedback.emotionalTone == '积极') taDelta += 1;
+    if (feedback.emotionalTone == '消极') taDelta -= 1;
+    // 关键事件
+    if (feedback.sharedSecret == true) taDelta += 2; // 分享秘密，说明信任
+    if (feedback.helpedEachOther == true) taDelta += 1; // 互相帮助，增进信任
+    if (feedback.hadConflict == true) taDelta -= 2; // 矛盾冲突，降低信任
+    if (feedback.keptPromise == true) taDelta += 1; // 信守承诺，增加信任
+    if (feedback.keptPromise == false) taDelta -= 2; // 违背承诺，严重降低
+
+    // 根据历史互动记录调整：互动越多且积极，信任变化的可靠性越高
+    final positiveLogs = logs.where((l) => l.emotionalTone == '积极').length;
+    final negativeLogs = logs.where((l) => l.emotionalTone == '消极').length;
+    final balance = positiveLogs - negativeLogs;
+    if (balance > 3 && taDelta > 0) taDelta += 1;
+    if (balance < -3 && taDelta < 0) taDelta -= 1;
+
+    // ===== 我对TA的信任度变化 =====
+    int myDelta = taDelta; // 初始参考TA的变化
+    // 用户画像影响：谨慎的人信任增长慢
+    if (userProfile != null && userProfile.personalityTraits.contains('谨慎')) {
+      if (myDelta > 0) myDelta = (myDelta * 0.6).round(); // 正向增长打6折
+    }
+    // 满意度对我的信任影响更大
+    if (feedback.satisfaction <= 1) myDelta -= 1;
+    if (feedback.satisfaction >= 5) myDelta += 1;
+    // 被背叛/矛盾对我的信任影响更大
+    if (feedback.hadConflict == true) myDelta -= 1;
+    if (feedback.keptPromise == false) myDelta -= 1;
+
+    // 确保在1-10范围内
+    final newTa = (oldTa + taDelta).clamp(1, 10);
+    final newMy = (oldMy + myDelta).clamp(1, 10);
+
+    // ===== 生成原因和分析 =====
+    final factors = <String>[];
+    if (feedback.satisfaction >= 4) factors.add('互动满意度高');
+    if (feedback.satisfaction <= 2) factors.add('互动满意度低');
+    if (feedback.emotionalTone == '积极') factors.add('对方情绪积极');
+    if (feedback.emotionalTone == '消极') factors.add('对方情绪消极');
+    if (feedback.sharedSecret == true) factors.add('分享了私人信息');
+    if (feedback.helpedEachOther == true) factors.add('互相帮助');
+    if (feedback.hadConflict == true) factors.add('发生矛盾');
+    if (feedback.keptPromise == true) factors.add('信守承诺');
+    if (feedback.keptPromise == false) factors.add('违背承诺');
+    if (factors.isEmpty) factors.add('常规互动');
+
+    final reason = factors.join('、');
+    final detail = '''
+【信任度AI分析报告 - ${contact.name}】
+
+一、互动概况
+• 满意度: ${feedback.satisfaction}/5
+• 情绪基调: ${feedback.emotionalTone ?? '未标注'}
+• 关键事件: ${_buildKeyEventsText(feedback)}
+
+二、TA对我的信任度
+• 原值: $oldTa/10 → 新值: $newTa/10 (${taDelta >= 0 ? '+' : ''}$taDelta)
+• 依据: $reason
+
+三、我对TA的信任度
+• 原值: $oldMy/10 → 新值: $newMy/10 (${myDelta >= 0 ? '+' : ''}$myDelta)
+• 依据: ${userProfile != null && userProfile.personalityTraits.contains('谨慎') ? '考虑到谨慎性格，信任增长较为保守；' : ''}$reason
+
+四、后续建议
+${_buildTrustAdvice(newTa, newMy, social.currentStage, feedback)}
+
+五、历史互动参考
+• 总互动次数: ${logs.length}
+• 积极互动: $positiveLogs次
+• 消极互动: $negativeLogs次
+• 净积极指数: ${balance >= 0 ? '+' : ''}$balance
+''';
+
+    return {
+      'taTrustLevel': newTa,
+      'myTrustLevel': newMy,
+      'taDelta': taDelta,
+      'myDelta': myDelta,
+      'reason': reason,
+      'detail': detail.trim(),
+    };
+  }
+
+  String _buildKeyEventsText(InteractionFeedback f) {
+    final events = <String>[];
+    if (f.sharedSecret == true) events.add('分享秘密');
+    if (f.helpedEachOther == true) events.add('互相帮助');
+    if (f.hadConflict == true) events.add('产生矛盾');
+    if (f.keptPromise == true) events.add('信守承诺');
+    if (f.keptPromise == false) events.add('违背承诺');
+    if (f.tags.isNotEmpty) events.addAll(f.tags);
+    return events.isEmpty ? '无特殊标记' : events.join('、');
+  }
+
+  String _buildTrustAdvice(int taTrust, int myTrust, RelationshipStage stage, InteractionFeedback fb) {
+    final avg = (taTrust + myTrust) / 2;
+    final stageText = _stageToText(stage);
+    final advice = <String>[];
+
+    if (taTrust <= 3) {
+      advice.add('• TA对您信任度偏低，建议：从小事做起，信守承诺，逐步积累信任；避免轻易许诺。');
+    } else if (taTrust >= 8) {
+      advice.add('• TA对您信任度很高，建议：珍惜这份信任，不要过度消费；在重要事情上继续保持可靠。');
+    }
+
+    if (myTrust <= 3) {
+      advice.add('• 您对TA信任度偏低，建议：给彼此一些时间，观察对方的实际行动；不要过早下结论。');
+    } else if (myTrust >= 8) {
+      advice.add('• 您对TA信任度很高，建议：保持独立判断力，信任也要有边界。');
+    }
+
+    if ((taTrust - myTrust).abs() >= 3) {
+      advice.add('• 双方信任度差距较大，建议：通过坦诚沟通缩小认知差距；避免单方面过度投入。');
+    }
+
+    if (fb.hadConflict == true) {
+      advice.add('• 近期发生矛盾，建议：适当冷静后主动沟通，坦诚表达感受，避免积累心结。');
+    }
+
+    if (fb.sharedSecret == true) {
+      advice.add('• 对方分享了私人信息，建议：妥善保密，这是增进信任的重要契机。');
+    }
+
+    if (avg >= 7 && stage.index < RelationshipStage.closeFriend.index) {
+      advice.add('• 信任基础良好，可以尝试推进关系阶段（如从朋友→好友）。');
+    }
+
+    if (advice.isEmpty) {
+      advice.add('• 信任度处于正常范围，继续正常互动即可。');
+    }
+
+    return advice.join('\n');
+  }
+
+  String _stageToText(RelationshipStage s) {
+    switch (s) {
+      case RelationshipStage.stranger: return '陌生人';
+      case RelationshipStage.acquaintance: return '熟人';
+      case RelationshipStage.friend: return '朋友';
+      case RelationshipStage.closeFriend: return '好友';
+      case RelationshipStage.bestFriend: return '挚友';
+      case RelationshipStage.confidant: return '知己';
+      case RelationshipStage.intimate: return '亲密关系';
+    }
+  }
+
+  /// 生成用于外部AI调用的信任度分析提示词
+  String buildExternalAITrustPrompt({
+    required Contact contact,
+    required ContactSocial social,
+    required InteractionFeedback feedback,
+    UserProfile? userProfile,
+  }) {
+    final logs = getLogsForContact(contact.id);
+    final buf = StringBuffer();
+    buf.writeln('请基于以下信息分析并更新双方信任度：');
+    buf.writeln('');
+    buf.writeln('【联系人信息】');
+    buf.writeln('姓名: ${contact.name}');
+    buf.writeln('性别/年龄: ${contact.genderName}${contact.age != null ? ' / ${contact.age}岁' : ''}');
+    if (contact.tags.isNotEmpty) buf.writeln('标签: ${contact.tags.join('、')}');
+    buf.writeln('');
+    buf.writeln('【当前信任度】');
+    buf.writeln('TA对我的信任度: ${social.taTrustLevel}/10');
+    buf.writeln('我对TA的信任度: ${social.myTrustLevel}/10');
+    buf.writeln('关系阶段: ${_stageToText(social.currentStage)}');
+    buf.writeln('关系温度: ${social.warmthLevel}/10');
+    buf.writeln('');
+    buf.writeln('【本次用户反馈的互动情况】');
+    buf.writeln('互动描述: ${feedback.content}');
+    buf.writeln('满意度: ${feedback.satisfaction}/5 (1很不满意，5非常满意)');
+    if (feedback.emotionalTone != null) buf.writeln('对方情绪基调: ${feedback.emotionalTone}');
+    buf.writeln('关键事件标记:');
+    if (feedback.sharedSecret == true) buf.writeln('  ✓ 对方分享了秘密/隐私给我');
+    if (feedback.helpedEachOther == true) buf.writeln('  ✓ 我们互相帮助了');
+    if (feedback.hadConflict == true) buf.writeln('  ✓ 这次产生了矛盾/误解');
+    if (feedback.keptPromise == true) buf.writeln('  ✓ 对方信守了承诺');
+    if (feedback.keptPromise == false) buf.writeln('  ✗ 对方违背了承诺');
+    if (feedback.tags.isNotEmpty) buf.writeln('额外标签: ${feedback.tags.join('、')}');
+    buf.writeln('');
+    buf.writeln('【近期互动历史（供参考）】');
+    if (logs.isEmpty) {
+      buf.writeln('（暂无历史记录）');
+    } else {
+      for (final l in logs.take(10)) {
+        final tone = l.emotionalTone ?? '中性';
+        final date = '${l.occurredAt.month}/${l.occurredAt.day}';
+        buf.writeln('• $date [$tone] ${l.title}');
+      }
+    }
+    buf.writeln('');
+    if (userProfile != null) {
+      buf.writeln('【用户画像（我）】');
+      buf.writeln('性格: ${userProfile.personalityTraits.join('、')}');
+      buf.writeln('沟通风格: ${userProfile.communicationStyle}');
+      buf.writeln('社交能量: ${userProfile.socialEnergy}/100');
+      buf.writeln('说明：如果用户性格偏"谨慎"，则我对TA的信任增长应更保守。');
+      buf.writeln('');
+    }
+    buf.writeln('【输出格式】');
+    buf.writeln('```json');
+    buf.writeln('{');
+    buf.writeln('  "taTrustLevel": 新的TA信任度整数1-10,');
+    buf.writeln('  "myTrustLevel": 新的我的信任度整数1-10,');
+    buf.writeln('  "reason": "一句话概括信任度变化的原因",');
+    buf.writeln('  "detail": "详细的分析报告，分点说明双方信任度变化依据，并给出后续建议"');
+    buf.writeln('}');
+    buf.writeln('```');
+    buf.writeln('');
+    buf.writeln('要求：');
+    buf.writeln('1. 信任度变化幅度一般在-3到+3之间，极端情况可以更大');
+    buf.writeln('2. TA对我的信任度主要看：对方的态度、是否分享隐私、是否信守承诺、是否帮助我');
+    buf.writeln('3. 我对TA的信任度主要看：我的满意度、对方是否可靠、是否产生矛盾、我的谨慎程度');
+    buf.writeln('4. detail应给出具体的后续建议，不少于100字');
+    return buf.toString();
+  }
+
+  /// 应用AI生成的信任度分析结果
+  Future<void> applyAnalyzedTrust({
+    required String contactId,
+    required int taTrustLevel,
+    required int myTrustLevel,
+    required String reason,
+    String? detail,
+    TrustChangeSource source = TrustChangeSource.internalAI,
+  }) async {
+    await updateSocial(
+      contactId: contactId,
+      taTrustLevel: taTrustLevel,
+      myTrustLevel: myTrustLevel,
+      trustChangeReason: reason,
+      trustChangeDetail: detail,
+      trustChangeSource: source,
+    );
+  }
+
+  /// 仅基于已有互动记录和Contact模型数据重新评估信任度（无用户主动反馈时使用）
+  Map<String, dynamic> reevaluateTrustFromExistingData({
+    required Contact contact,
+    required ContactSocial social,
+  }) {
+    final logs = getLogsForContact(contact.id);
+    final oldTa = social.taTrustLevel;
+    final oldMy = social.myTrustLevel;
+
+    // 使用Contact中的历史信任度作为参考锚点
+    final anchorTa = contact.taTrustLevel;
+    final anchorMy = contact.myTrustLevel;
+
+    // 基于互动日志计算调整
+    final positiveLogs = logs.where((l) => l.emotionalTone == '积极').length;
+    final negativeLogs = logs.where((l) => l.emotionalTone == '消极').length;
+    final total = logs.length;
+    final avgTone = total == 0 ? 0 : (positiveLogs - negativeLogs) / total;
+
+    // 轻微调整（不超过±2）
+    int taDelta = (avgTone * 2).round().clamp(-2, 2);
+    int myDelta = taDelta;
+
+    // 如果Contact中的信任度与当前差距太大，向锚点靠拢
+    final taGap = anchorTa - oldTa;
+    final myGap = anchorMy - oldMy;
+    if (taDelta == 0 && taGap.abs() >= 3) {
+      taDelta = (taGap * 0.3).round(); // 向锚点靠近30%
+    }
+    if (myDelta == 0 && myGap.abs() >= 3) {
+      myDelta = (myGap * 0.3).round();
+    }
+
+    final newTa = (oldTa + taDelta).clamp(1, 10);
+    final newMy = (oldMy + myDelta).clamp(1, 10);
+
+    final reason = total == 0
+        ? '基于历史档案校准'
+        : '基于$total次历史互动记录（积极$positiveLogs/消极$negativeLogs）重新评估';
+
+    final detail = '''
+【信任度自动重评估 - ${contact.name}】
+
+• 参考档案信任度: TA $anchorTa/10，我 $anchorMy/10
+• 历史互动统计: 共$total次（积极$positiveLogs，消极$negativeLogs）
+• 综合情绪指数: ${avgTone.toStringAsFixed(2)}
+
+变化说明：
+• TA对我的信任度: $oldTa → $newTa (${taDelta >= 0 ? '+' : ''}$taDelta)
+• 我对TA的信任度: $oldMy → $newMy (${myDelta >= 0 ? '+' : ''}$myDelta)
+
+建议：定期补充互动反馈，可以获得更精准的信任度分析。
+''';
+
+    return {
+      'taTrustLevel': newTa,
+      'myTrustLevel': newMy,
+      'taDelta': taDelta,
+      'myDelta': myDelta,
+      'reason': reason,
+      'detail': detail.trim(),
+    };
+  }
+
+  void setAnalyzingTrust(bool v) {
+    _isAnalyzingTrust = v;
     notifyListeners();
   }
 }

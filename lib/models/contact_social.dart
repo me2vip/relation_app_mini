@@ -39,6 +39,10 @@ class ContactSocial {
   final int warmthLevel; // 温度1-10
   final int lastInteractionDays; // 上次互动天数
 
+  // ===== 信任度 =====
+  final int taTrustLevel; // TA对我的信任度（1-10）
+  final int myTrustLevel; // 我对TA的信任度（1-10）
+
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -54,6 +58,8 @@ class ContactSocial {
     this.customOutline,
     this.warmthLevel = 5,
     this.lastInteractionDays = 0,
+    this.taTrustLevel = 5,
+    this.myTrustLevel = 5,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -70,6 +76,8 @@ class ContactSocial {
     String? customOutline,
     int? warmthLevel,
     int? lastInteractionDays,
+    int? taTrustLevel,
+    int? myTrustLevel,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ContactSocial(
@@ -84,6 +92,8 @@ class ContactSocial {
     customOutline: customOutline ?? this.customOutline,
     warmthLevel: warmthLevel ?? this.warmthLevel,
     lastInteractionDays: lastInteractionDays ?? this.lastInteractionDays,
+    taTrustLevel: taTrustLevel ?? this.taTrustLevel,
+    myTrustLevel: myTrustLevel ?? this.myTrustLevel,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -100,6 +110,8 @@ class ContactSocial {
     'customOutline': customOutline,
     'warmthLevel': warmthLevel,
     'lastInteractionDays': lastInteractionDays,
+    'taTrustLevel': taTrustLevel,
+    'myTrustLevel': myTrustLevel,
     'createdAt': createdAt.toIso8601String(),
     'updatedAt': updatedAt.toIso8601String(),
   };
@@ -116,6 +128,8 @@ class ContactSocial {
     customOutline: json['customOutline'] as String?,
     warmthLevel: json['warmthLevel'] as int? ?? 5,
     lastInteractionDays: json['lastInteractionDays'] as int? ?? 0,
+    taTrustLevel: json['taTrustLevel'] as int? ?? 5,
+    myTrustLevel: json['myTrustLevel'] as int? ?? 5,
     createdAt: DateTime.parse(json['createdAt'] as String),
     updatedAt: DateTime.parse(json['updatedAt'] as String),
   );
@@ -330,3 +344,125 @@ const List<SocialOutlineTemplate> kSocialOutlineTemplates = [
     description: '保持适度频率的联系，维护现有关系',
   ),
 ];
+
+/// 信任度变化来源
+enum TrustChangeSource {
+  manual, // 手动编辑
+  internalAI, // 内部AI分析
+  externalAI, // 外部AI分析
+  interaction, // 互动记录自动更新
+}
+
+/// 信任度变化记录 - 追踪每次信任度的变动
+class TrustChangeRecord {
+  final String id;
+  final String contactId;
+
+  // 变动前的值
+  final int oldTaTrustLevel;
+  final int oldMyTrustLevel;
+  // 变动后的值
+  final int newTaTrustLevel;
+  final int newMyTrustLevel;
+
+  // 变动原因
+  final String reason; // 简要原因
+  final String? detail; // 详细说明（AI分析结果或用户备注）
+
+  // 来源
+  final TrustChangeSource source;
+  final String? relatedLogId; // 关联的互动记录ID
+
+  final DateTime createdAt;
+
+  TrustChangeRecord({
+    required this.id,
+    required this.contactId,
+    required this.oldTaTrustLevel,
+    required this.oldMyTrustLevel,
+    required this.newTaTrustLevel,
+    required this.newMyTrustLevel,
+    required this.reason,
+    this.detail,
+    this.source = TrustChangeSource.manual,
+    this.relatedLogId,
+    required this.createdAt,
+  });
+
+  int get taTrustDelta => newTaTrustLevel - oldTaTrustLevel;
+  int get myTrustDelta => newMyTrustLevel - oldMyTrustLevel;
+
+  String get sourceName {
+    switch (source) {
+      case TrustChangeSource.manual: return '手动调整';
+      case TrustChangeSource.internalAI: return 'AI分析';
+      case TrustChangeSource.externalAI: return '外部AI';
+      case TrustChangeSource.interaction: return '互动记录';
+    }
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'contactId': contactId,
+    'oldTaTrustLevel': oldTaTrustLevel,
+    'oldMyTrustLevel': oldMyTrustLevel,
+    'newTaTrustLevel': newTaTrustLevel,
+    'newMyTrustLevel': newMyTrustLevel,
+    'reason': reason,
+    'detail': detail,
+    'source': source.index,
+    'relatedLogId': relatedLogId,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory TrustChangeRecord.fromJson(Map<String, dynamic> json) => TrustChangeRecord(
+    id: json['id'] as String,
+    contactId: json['contactId'] as String,
+    oldTaTrustLevel: json['oldTaTrustLevel'] as int? ?? 5,
+    oldMyTrustLevel: json['oldMyTrustLevel'] as int? ?? 5,
+    newTaTrustLevel: json['newTaTrustLevel'] as int? ?? 5,
+    newMyTrustLevel: json['newMyTrustLevel'] as int? ?? 5,
+    reason: json['reason'] as String? ?? '未说明',
+    detail: json['detail'] as String?,
+    source: TrustChangeSource.values[json['source'] as int? ?? 0],
+    relatedLogId: json['relatedLogId'] as String?,
+    createdAt: DateTime.parse(json['createdAt'] as String),
+  );
+}
+
+/// 用户反馈的互动情况 - 用于AI分析信任度
+class InteractionFeedback {
+  final String contactId;
+  final String content; // 互动情况描述
+  final int satisfaction; // 满意度 1-5
+  final String? emotionalTone; // 对方情绪：积极/中性/消极
+  final bool? sharedSecret; // 是否分享了秘密/隐私
+  final bool? helpedEachOther; // 是否互相帮助
+  final bool? hadConflict; // 是否产生矛盾
+  final bool? keptPromise; // 是否信守承诺
+  final List<String> tags; // 额外标签
+
+  InteractionFeedback({
+    required this.contactId,
+    required this.content,
+    this.satisfaction = 3,
+    this.emotionalTone,
+    this.sharedSecret,
+    this.helpedEachOther,
+    this.hadConflict,
+    this.keptPromise,
+    this.tags = const [],
+  });
+
+  Map<String, dynamic> toMap() => {
+    'contactId': contactId,
+    'content': content,
+    'satisfaction': satisfaction,
+    'emotionalTone': emotionalTone,
+    'sharedSecret': sharedSecret,
+    'helpedEachOther': helpedEachOther,
+    'hadConflict': hadConflict,
+    'keptPromise': keptPromise,
+    'tags': tags,
+  };
+}

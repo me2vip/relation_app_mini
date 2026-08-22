@@ -23,7 +23,7 @@ class _ContactSocialPageState extends State<ContactSocialPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -39,8 +39,10 @@ class _ContactSocialPageState extends State<ContactSocialPage>
         title: Text('${widget.contact.name} · 社交管理'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: '社交航向'),
+            Tab(text: '信任度'),
             Tab(text: '互动记录'),
             Tab(text: '大纲设置'),
           ],
@@ -50,10 +52,12 @@ class _ContactSocialPageState extends State<ContactSocialPage>
         builder: (context, provider, _) {
           final social = provider.getSocial(widget.contact.id);
           final logs = provider.getLogsForContact(widget.contact.id);
+          final trustRecords = provider.getTrustRecords(widget.contact.id);
           return TabBarView(
             controller: _tabController,
             children: [
               _buildDirectionTab(provider, social),
+              _buildTrustTab(provider, social, trustRecords),
               _buildLogsTab(provider, logs),
               _buildOutlineTab(provider, social),
             ],
@@ -1224,5 +1228,1035 @@ class _ContactSocialPageState extends State<ContactSocialPage>
 
   String _formatDateTime(DateTime dt) {
     return '${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  // ============== 信任度 Tab ==============
+
+  Widget _buildTrustTab(
+    ContactSocialProvider provider,
+    ContactSocial social,
+    List<TrustChangeRecord> records,
+  ) {
+    final profileProvider = context.read<ProfileProvider>();
+    final userProfile = profileProvider.profile;
+    final isAnalyzing = provider.isAnalyzingTrust;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ===== AI 信任度分析入口 =====
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF10B981), Color(0xFF059669)],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF10B981).withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: const [
+                    Icon(Icons.psychology_alt, color: Colors.white, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'AI 信任度分析',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  '提供双方互动的反馈情况，AI 将综合历史记录、用户画像等数据智能评估双方信任度。',
+                  style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          side: const BorderSide(color: Colors.white, width: 1.2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                        icon: const Icon(Icons.bolt, size: 18),
+                        label: const Text('内部AI分析', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: isAnalyzing
+                            ? null
+                            : () => _showFeedbackDialog(
+                                  provider,
+                                  social,
+                                  userProfile,
+                                  useExternalAI: false,
+                                ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: const Color(0xFF10B981),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('外部AI分析', style: TextStyle(fontWeight: FontWeight.w600)),
+                        onPressed: isAnalyzing
+                            ? null
+                            : () => _showFeedbackDialog(
+                                  provider,
+                                  social,
+                                  userProfile,
+                                  useExternalAI: true,
+                                ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                    ),
+                    icon: const Icon(Icons.refresh, size: 16),
+                    label: const Text('基于已有数据重新评估', style: TextStyle(fontSize: 12)),
+                    onPressed: () async {
+                      provider.setAnalyzingTrust(true);
+                      try {
+                        await Future.delayed(const Duration(milliseconds: 400));
+                        final result = provider.reevaluateTrustFromExistingData(
+                          contact: widget.contact,
+                          social: social,
+                        );
+                        await provider.applyAnalyzedTrust(
+                          contactId: widget.contact.id,
+                          taTrustLevel: result['taTrustLevel'] as int,
+                          myTrustLevel: result['myTrustLevel'] as int,
+                          reason: result['reason'] as String,
+                          detail: result['detail'] as String,
+                          source: TrustChangeSource.interaction,
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('${result['reason']} ✓')),
+                          );
+                        }
+                      } finally {
+                        provider.setAnalyzingTrust(false);
+                      }
+                    },
+                  ),
+                ),
+                if (isAnalyzing) ...[
+                  const SizedBox(height: 12),
+                  const LinearProgressIndicator(
+                    color: Colors.white,
+                    backgroundColor: Colors.white24,
+                  ),
+                ]
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ===== 信任度概览 =====
+          _buildTrustOverviewCard(provider, social),
+          const SizedBox(height: 16),
+
+          // ===== 信任度变化历史 =====
+          _buildTrustHistoryCard(records),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrustOverviewCard(ContactSocialProvider provider, ContactSocial social) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const Text(
+                  '当前信任度',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                  tooltip: '手动调整',
+                  onPressed: () => _showManualTrustEditDialog(provider, social),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTrustBar(
+                    label: 'TA对我的信任',
+                    value: social.taTrustLevel,
+                    color: const Color(0xFF6366F1),
+                  ),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: _buildTrustBar(
+                    label: '我对TA的信任',
+                    value: social.myTrustLevel,
+                    color: const Color(0xFF10B981),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            // 滑块微调
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'TA对我: ${social.taTrustLevel}/10',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF6366F1), fontWeight: FontWeight.w600),
+                      ),
+                      Slider(
+                        value: social.taTrustLevel.toDouble(),
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        activeColor: const Color(0xFF6366F1),
+                        onChanged: (v) {
+                          provider.updateSocial(
+                            contactId: widget.contact.id,
+                            taTrustLevel: v.round(),
+                            trustChangeReason: '手动滑动微调',
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '我对TA: ${social.myTrustLevel}/10',
+                        style: const TextStyle(fontSize: 12, color: Color(0xFF10B981), fontWeight: FontWeight.w600),
+                      ),
+                      Slider(
+                        value: social.myTrustLevel.toDouble(),
+                        min: 1,
+                        max: 10,
+                        divisions: 9,
+                        activeColor: const Color(0xFF10B981),
+                        onChanged: (v) {
+                          provider.updateSocial(
+                            contactId: widget.contact.id,
+                            myTrustLevel: v.round(),
+                            trustChangeReason: '手动滑动微调',
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrustBar({required String label, required int value, required Color color}) {
+    final percent = value / 10.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text('$value/10', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Stack(
+          children: [
+            Container(
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.grey[200],
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+            FractionallySizedBox(
+              widthFactor: percent,
+              child: Container(
+                height: 8,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('1', style: TextStyle(fontSize: 9, color: Colors.grey[400])),
+            Text('5', style: TextStyle(fontSize: 9, color: Colors.grey[400])),
+            Text('10', style: TextStyle(fontSize: 9, color: Colors.grey[400])),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTrustHistoryCard(List<TrustChangeRecord> records) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              '信任度变化记录',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '共 ${records.length} 条变动记录',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 12),
+            if (records.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.history, size: 40, color: Colors.grey),
+                      SizedBox(height: 8),
+                      Text('暂无变化记录', style: TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ...records.take(20).map((r) => _buildTrustRecordItem(r)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTrustRecordItem(TrustChangeRecord r) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: _getTrustSourceColor(r.source),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  r.sourceName,
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  r.reason,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                _formatDateTime(r.createdAt),
+                style: const TextStyle(fontSize: 10, color: Colors.grey),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              _trustDeltaBadge('TA信任', r.oldTaTrustLevel, r.newTaTrustLevel, const Color(0xFF6366F1)),
+              const SizedBox(width: 8),
+              _trustDeltaBadge('我信任', r.oldMyTrustLevel, r.newMyTrustLevel, const Color(0xFF10B981)),
+            ],
+          ),
+          if (r.detail != null) ...[
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: () => _showTrustDetailDialog(r),
+              child: Text(
+                '查看详细分析 →',
+                style: TextStyle(fontSize: 11, color: Colors.blue.shade600),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _trustDeltaBadge(String label, int from, int to, Color color) {
+    final delta = to - from;
+    final deltaText = delta > 0 ? '+$delta' : '$delta';
+    final deltaColor = delta > 0 ? Colors.green : delta < 0 ? Colors.red : Colors.grey;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 4),
+          Text('$from→$to', style: const TextStyle(fontSize: 11)),
+          if (delta != 0) ...[
+            const SizedBox(width: 4),
+            Text(deltaText, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: deltaColor)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _getTrustSourceColor(TrustChangeSource s) {
+    switch (s) {
+      case TrustChangeSource.manual: return Colors.grey;
+      case TrustChangeSource.internalAI: return Colors.blue;
+      case TrustChangeSource.externalAI: return Colors.purple;
+      case TrustChangeSource.interaction: return Colors.teal;
+    }
+  }
+
+  // ===== 互动反馈对话框（用于AI信任度分析） =====
+  Future<void> _showFeedbackDialog(
+    ContactSocialProvider provider,
+    ContactSocial social,
+    UserProfile? userProfile, {
+    required bool useExternalAI,
+  }) async {
+    final contentController = TextEditingController();
+    int satisfaction = 3;
+    String? emotionalTone;
+    bool sharedSecret = false;
+    bool helpedEachOther = false;
+    bool hadConflict = false;
+    bool? keptPromise; // null未选, true是, false否
+    final tags = <String>[];
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(useExternalAI ? Icons.open_in_new : Icons.bolt, color: const Color(0xFF10B981)),
+                const SizedBox(width: 8),
+                Text(useExternalAI ? '外部AI信任度分析' : '内部AI信任度分析'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '请提供与TA的互动反馈，AI将据此更新双方信任度：',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  // 互动描述
+                  TextField(
+                    controller: contentController,
+                    maxLines: 4,
+                    decoration: const InputDecoration(
+                      labelText: '互动情况描述',
+                      hintText: '例如：今天TA主动跟我分享了家里的事情，聊了1小时...',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  // 满意度
+                  const Text('满意度', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: List.generate(5, (i) {
+                      final v = i + 1;
+                      final selected = satisfaction == v;
+                      final emojis = ['😞', '😕', '😐', '🙂', '😊'];
+                      final labels = ['很不满意', '不太满意', '一般', '比较满意', '非常满意'];
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDialogState(() => satisfaction = v),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? const Color(0xFF10B981).withOpacity(0.15)
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: selected ? const Color(0xFF10B981) : Colors.transparent,
+                                  ),
+                                ),
+                                child: Text(emojis[i], style: const TextStyle(fontSize: 20)),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                labels[i],
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: selected ? const Color(0xFF10B981) : Colors.grey,
+                                  fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 14),
+                  // 情绪基调
+                  const Text('对方情绪基调', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _optionChip('😊 积极', emotionalTone == '积极', () {
+                        setDialogState(() => emotionalTone = emotionalTone == '积极' ? null : '积极');
+                      }, Colors.green),
+                      _optionChip('😐 中性', emotionalTone == '中性', () {
+                        setDialogState(() => emotionalTone = emotionalTone == '中性' ? null : '中性');
+                      }, Colors.grey),
+                      _optionChip('😟 消极', emotionalTone == '消极', () {
+                        setDialogState(() => emotionalTone = emotionalTone == '消极' ? null : '消极');
+                      }, Colors.orange),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  // 关键事件
+                  const Text('关键事件（可多选）', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _optionChip(
+                        '🔐 TA分享了秘密/隐私',
+                        sharedSecret,
+                        () => setDialogState(() => sharedSecret = !sharedSecret),
+                        Colors.purple,
+                      ),
+                      _optionChip(
+                        '🤝 互相帮助',
+                        helpedEachOther,
+                        () => setDialogState(() => helpedEachOther = !helpedEachOther),
+                        Colors.blue,
+                      ),
+                      _optionChip(
+                        '💥 产生矛盾/误解',
+                        hadConflict,
+                        () => setDialogState(() => hadConflict = !hadConflict),
+                        Colors.red,
+                      ),
+                      _optionChip(
+                        '✅ TA信守了承诺',
+                        keptPromise == true,
+                        () => setDialogState(() {
+                          keptPromise = keptPromise == true ? null : true;
+                        }),
+                        Colors.teal,
+                      ),
+                      _optionChip(
+                        '❌ TA违背了承诺',
+                        keptPromise == false,
+                        () => setDialogState(() {
+                          keptPromise = keptPromise == false ? null : false;
+                        }),
+                        Colors.redAccent,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  if (contentController.text.trim().isEmpty && tags.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('请至少填写互动描述')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(ctx, {
+                    'content': contentController.text.trim(),
+                    'satisfaction': satisfaction,
+                    'emotionalTone': emotionalTone,
+                    'sharedSecret': sharedSecret,
+                    'helpedEachOther': helpedEachOther,
+                    'hadConflict': hadConflict,
+                    'keptPromise': keptPromise,
+                    'tags': tags,
+                  });
+                },
+                child: Text(useExternalAI ? '生成提示词' : '立即分析'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (result == null || !mounted) return;
+
+    final feedback = InteractionFeedback(
+      contactId: widget.contact.id,
+      content: result['content'] as String,
+      satisfaction: result['satisfaction'] as int,
+      emotionalTone: result['emotionalTone'] as String?,
+      sharedSecret: result['sharedSecret'] as bool,
+      helpedEachOther: result['helpedEachOther'] as bool,
+      hadConflict: result['hadConflict'] as bool,
+      keptPromise: result['keptPromise'] as bool?,
+      tags: List<String>.from(result['tags'] as List? ?? []),
+    );
+
+    if (useExternalAI) {
+      // ===== 外部AI流程：显示双Tab对话框（复制提示词/粘贴结果）=====
+      if (!mounted) return;
+      await _showExternalAITrustDialog(provider, social, feedback, userProfile);
+    } else {
+      // ===== 内部AI直接分析 =====
+      provider.setAnalyzingTrust(true);
+      try {
+        await Future.delayed(const Duration(milliseconds: 600));
+        final analysis = provider.analyzeTrustWithInternalAI(
+          contact: widget.contact,
+          social: social,
+          feedback: feedback,
+          userProfile: userProfile,
+        );
+        await provider.applyAnalyzedTrust(
+          contactId: widget.contact.id,
+          taTrustLevel: analysis['taTrustLevel'] as int,
+          myTrustLevel: analysis['myTrustLevel'] as int,
+          reason: analysis['reason'] as String,
+          detail: analysis['detail'] as String,
+          source: TrustChangeSource.internalAI,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('信任度已更新 ✓')),
+          );
+        }
+      } finally {
+        provider.setAnalyzingTrust(false);
+      }
+    }
+  }
+
+  Widget _optionChip(String label, bool selected, VoidCallback onTap, Color color) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? color.withOpacity(0.12) : Colors.grey[100],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected ? color : Colors.transparent,
+            width: 1.2,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: selected ? color : Colors.black87,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ===== 手动编辑信任度对话框 =====
+  Future<void> _showManualTrustEditDialog(ContactSocialProvider provider, ContactSocial social) async {
+    final taController = TextEditingController(text: social.taTrustLevel.toString());
+    final myController = TextEditingController(text: social.myTrustLevel.toString());
+    final reasonController = TextEditingController();
+
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('手动调整信任度'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: taController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'TA对我的信任 (1-10)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: myController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '我对TA的信任 (1-10)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              decoration: const InputDecoration(
+                labelText: '调整原因（可选）',
+                hintText: '例如：一起度过了一段难忘的时光',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () {
+              final ta = int.tryParse(taController.text.trim());
+              final my = int.tryParse(myController.text.trim());
+              if (ta == null || my == null || ta < 1 || ta > 10 || my < 1 || my > 10) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('请输入1-10之间的整数')),
+                );
+                return;
+              }
+              Navigator.pop(ctx, {
+                'ta': ta,
+                'my': my,
+                'reason': reasonController.text.trim(),
+              });
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      await provider.updateSocial(
+        contactId: widget.contact.id,
+        taTrustLevel: result['ta'] as int,
+        myTrustLevel: result['my'] as int,
+        trustChangeReason: (result['reason'] as String).isEmpty ? '手动编辑调整' : result['reason'] as String,
+        trustChangeSource: TrustChangeSource.manual,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('信任度已更新 ✓')),
+      );
+    }
+  }
+
+  // ===== 信任度详情对话框 =====
+  void _showTrustDetailDialog(TrustChangeRecord r) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.assignment, color: _getTrustSourceColor(r.source)),
+            const SizedBox(width: 8),
+            Text(r.sourceName),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                r.reason,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                _formatDateTime(r.createdAt),
+                style: const TextStyle(fontSize: 11, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _trustDeltaBadge('TA信任', r.oldTaTrustLevel, r.newTaTrustLevel, const Color(0xFF6366F1))),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(child: _trustDeltaBadge('我信任', r.oldMyTrustLevel, r.newMyTrustLevel, const Color(0xFF10B981))),
+                ],
+              ),
+              if (r.detail != null) ...[
+                const SizedBox(height: 14),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Text(
+                  r.detail!,
+                  style: const TextStyle(fontSize: 13, height: 1.6),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('关闭'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ===== 外部AI信任度分析双Tab对话框 =====
+  Future<void> _showExternalAITrustDialog(
+    ContactSocialProvider provider,
+    ContactSocial social,
+    InteractionFeedback feedback,
+    UserProfile? userProfile,
+  ) async {
+    final prompt = provider.buildExternalAITrustPrompt(
+      contact: widget.contact,
+      social: social,
+      feedback: feedback,
+      userProfile: userProfile,
+    );
+    final pasteController = TextEditingController();
+    final tabController = TabController(length: 2, vsync: this);
+
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.psychology_alt, color: Color(0xFF10B981)),
+            SizedBox(width: 8),
+            Text('外部AI信任度分析'),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TabBar(
+                controller: tabController,
+                labelColor: const Color(0xFF10B981),
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(text: '① 复制提示词'),
+                  Tab(text: '② 粘贴结果'),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: TabBarView(
+                  controller: tabController,
+                  children: [
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '将以下内容复制到任意 AI App（千问/豆包/ChatGPT等）：',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[100],
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: SelectableText(
+                              prompt,
+                              style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+                              onPressed: () async {
+                                await Clipboard.setData(ClipboardData(text: prompt));
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(content: Text('提示词已复制 ✓')),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.copy),
+                              label: const Text('复制提示词'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '粘贴 AI 返回的 JSON 结果：',
+                            style: TextStyle(fontSize: 13, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: pasteController,
+                            maxLines: 12,
+                            decoration: const InputDecoration(
+                              hintText: '粘贴AI返回的JSON，例如：\n{\n  "taTrustLevel": 7,\n  "myTrustLevel": 6,\n  "reason": "互动满意度高且对方分享了秘密",\n  "detail": "...详细分析..."\n}',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF10B981)),
+            onPressed: () async {
+              final text = pasteController.text.trim();
+              if (text.isEmpty) {
+                tabController.animateTo(1);
+                return;
+              }
+              try {
+                final parsed = jsonDecode(text) as Map<String, dynamic>;
+                final ta = parsed['taTrustLevel'];
+                final my = parsed['myTrustLevel'];
+                final taVal = ta is int ? ta : int.tryParse(ta.toString());
+                final myVal = my is int ? my : int.tryParse(my.toString());
+                final reason = (parsed['reason'] as String?)?.trim() ?? '外部AI分析';
+                final detail = parsed['detail'] as String?;
+                if (taVal == null || myVal == null || taVal < 1 || taVal > 10 || myVal < 1 || myVal > 10) {
+                  throw Exception('taTrustLevel 或 myTrustLevel 不在1-10范围内');
+                }
+                await provider.applyAnalyzedTrust(
+                  contactId: widget.contact.id,
+                  taTrustLevel: taVal,
+                  myTrustLevel: myVal,
+                  reason: reason,
+                  detail: detail,
+                  source: TrustChangeSource.externalAI,
+                );
+                if (ctx.mounted) {
+                  ScaffoldMessenger.of(ctx).showSnackBar(
+                    const SnackBar(content: Text('信任度已应用 ✓')),
+                  );
+                  Navigator.pop(ctx, true);
+                }
+              } catch (e) {
+                showDialog(
+                  context: ctx,
+                  builder: (ctx2) => AlertDialog(
+                    title: const Text('解析失败'),
+                    content: Text('无法解析返回结果，请确认是合法的JSON格式。\n\n错误：$e'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx2), child: const Text('好的')),
+                    ],
+                  ),
+                );
+              }
+            },
+            child: const Text('应用结果'),
+          ),
+        ],
+      ),
+    );
   }
 }
